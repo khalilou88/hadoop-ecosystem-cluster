@@ -117,10 +117,10 @@ jobs:
         # Execute the classic WordCount MapReduce example to verify MapReduce functionality
         run: |
           echo "Running MapReduce WordCount example..."
-          EXAMPLES_JAR=$(docker compose exec mapreduce-client find /opt/hadoop/share/hadoop/mapreduce -name "hadoop-mapreduce-examples-*.jar" | tr -d '\r')
+          EXAMPLES_JAR=$(docker compose exec mapreduce-client find /opt/hadoop/share/hadoop/mapreduce -name "hadoop-mapreduce-examples-*.jar" -not -name "*sources*" -not -name "*test*" | head -1 | tr -d '\r')
           echo "Found examples JAR: $EXAMPLES_JAR"
           docker compose exec mapreduce-client hadoop jar \
-            $EXAMPLES_JAR \
+            "$EXAMPLES_JAR" \
             wordcount /user/test/input /user/test/output/wordcount
           echo "MapReduce WordCount job completed."
 
@@ -175,10 +175,10 @@ jobs:
         # Submit another MapReduce job to test YARN integration
         run: |
           echo "Testing MapReduce job submission via YARN..."
-          EXAMPLES_JAR=$(docker compose exec mapreduce-client find /opt/hadoop/share/hadoop/mapreduce -name "hadoop-mapreduce-examples-*.jar" | tr -d '\r')
+          EXAMPLES_JAR=$(docker compose exec mapreduce-client find /opt/hadoop/share/hadoop/mapreduce -name "hadoop-mapreduce-examples-*.jar" -not -name "*sources*" -not -name "*test*" | head -1 | tr -d '\r')
           echo "Found examples JAR: $EXAMPLES_JAR"
           docker compose exec mapreduce-client hadoop jar \
-            $EXAMPLES_JAR \
+            "$EXAMPLES_JAR" \
             pi 2 10
           echo "MapReduce Pi calculation job completed."
 
