@@ -25,9 +25,9 @@ services:
     command: ["hdfs", "datanode"]
     env_file:
       - ./config
-    depends_on:
-      namenode:
-        condition: service_healthy
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
     healthcheck:
       test: ["CMD", "hdfs", "dfsadmin", "-report"]
       interval: 30s
@@ -44,9 +44,9 @@ services:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
-    depends_on:
-      namenode:
-        condition: service_healthy
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
     healthcheck:
       test: ["CMD", "jps | grep ResourceManager"]
       interval: 30s
@@ -59,6 +59,6 @@ services:
     command: ["yarn", "nodemanager"]
     env_file:
       - ./config
-    depends_on:
-      resourcemanager:
-        condition: service_healthy
+    # depends_on:
+    #   resourcemanager:
+    #     condition: service_healthy
