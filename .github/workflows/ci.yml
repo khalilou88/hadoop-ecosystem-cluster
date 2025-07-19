@@ -110,7 +110,7 @@ jobs:
           docker compose exec mapreduce-client bash -c "echo 'hello world' > /tmp/input.txt"
           docker compose exec mapreduce-client bash -c "echo 'hello hadoop' >> /tmp/input.txt"
           docker compose exec mapreduce-client bash -c "echo 'mapreduce test' >> /tmp/input.txt"
-          docker compose exec namenode hdfs dfs -put /tmp/input.txt /user/test/input/
+          docker compose exec mapreduce-client hdfs dfs -put /tmp/input.txt /user/test/input/
           echo "Test data uploaded to HDFS."
 
       - name: Run MapReduce WordCount example
