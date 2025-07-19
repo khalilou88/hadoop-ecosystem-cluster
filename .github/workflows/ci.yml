@@ -35,6 +35,43 @@ jobs:
       - name: Test 1
         run: docker compose ps namenode
 
+      - name: Wait for NameNode to be healthy
+        # Wait for the NameNode service to report as healthy.
+        # This is crucial before interacting with HDFS.
+        # We check the health status of the 'namenode' service.
+        run: |
+          echo "Waiting for NameNode to be healthy..."
+
+          # More robust health check with better error handling
+          timeout 300s bash -c '
+            while true; do
+              # Check if container is running first
+              if ! docker compose ps namenode --format "table {{.State}}" | grep -q "running"; then
+                echo "NameNode container is not running!"
+                docker compose logs namenode --tail=20
+                exit 1
+              fi
+              
+              # Check health status
+              if docker compose ps namenode --format "table {{.Status}}" | grep -q "healthy"; then
+                echo ""
+                echo "NameNode is healthy!"
+                break
+              fi
+              
+              echo -n "."
+              sleep 5
+            done
+          ' || {
+            echo ""
+            echo "NameNode did not become healthy within 5 minutes!"
+            echo "Current status:"
+            docker compose ps namenode
+            echo "Recent logs:"
+            docker compose logs namenode --tail=50
+            exit 1
+          }
+
       - name: Test 2
         run: docker compose ps namenode | grep "healthy"
 
