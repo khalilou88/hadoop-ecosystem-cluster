@@ -97,12 +97,12 @@ services:
   mapreduce-client:
     image: apache/hadoop:3
     hostname: mapreduce-client
-    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    command: ["tail", "-f", "/dev/null"] # Keep container running
     env_file:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
-      - ./mapreduce-jobs:/opt/mapreduce-jobs  # Mount directory for job files
+      - ./mapreduce-jobs:/opt/mapreduce-jobs # Mount directory for job files
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -135,6 +135,8 @@ services:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
       SERVICE_OPTS: "-Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore -Djavax.jdo.option.ConnectionUserName=hive -Djavax.jdo.option.ConnectionPassword=hive123"
+    volumes:
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql-42.7.7.jar
     env_file:
       - ./config
     ports:
@@ -161,8 +163,8 @@ services:
     env_file:
       - ./config
     ports:
-      - 10000:10000  # HiveServer2 Thrift port
-      - 10002:10002  # HiveServer2 Web UI
+      - 10000:10000 # HiveServer2 Thrift port
+      - 10002:10002 # HiveServer2 Web UI
     volumes:
       - ./test.sh:/opt/test.sh
     # depends_on:
@@ -180,14 +182,14 @@ services:
   hive-client:
     image: apache/hive:4.0.0
     hostname: hive-client
-    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    command: ["tail", "-f", "/dev/null"] # Keep container running
     environment:
       SERVICE_OPTS: "-Dhive.metastore.uris=thrift://hive-metastore:9083"
     env_file:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
-      - ./hive-queries:/opt/hive-queries  # Mount directory for query files
+      - ./hive-queries:/opt/hive-queries # Mount directory for query files
     # depends_on:
     #   namenode:
     #     condition: service_healthy
