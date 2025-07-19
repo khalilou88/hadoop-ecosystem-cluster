@@ -79,24 +79,21 @@ jobs:
           echo "YARN ResourceManager status verified."
 
       - name: Check NameNode UI accessibility
-        # Use curl to check if the NameNode UI is responding.
-        # -f: Fail silently (no output on HTTP errors).
+        # Use curl -s -I to get only headers, then parse the HTTP status code.
         # -s: Silent mode (don't show progress meter or error messages).
-        # -S: Show error (when -s is used).
-        # -o /dev/null: Discard output.
-        # -w "%{http_code}": Output HTTP status code.
+        # -I: Perform a HEAD request to get only headers.
         run: |
           echo "Checking NameNode UI at http://localhost:9870..."
-          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9870)" == "200" ]; do
+          until [ "$(curl -s -I http://localhost:9870 | head -n 1 | awk '{print $2}')" == "200" ]; do
             echo -n "."; sleep 5;
           done
           echo "NameNode UI is accessible."
 
       - name: Check ResourceManager UI accessibility
-        # Use curl to check if the ResourceManager UI is responding.
+        # Use curl -s -I to get only headers, then parse the HTTP status code.
         run: |
           echo "Checking ResourceManager UI at http://localhost:8088..."
-          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088)" == "200" ]; do
+          until [ "$(curl -s -I http://localhost:8088 | head -n 1 | awk '{print $2}')" == "200" ]; do
             echo -n "."; sleep 5;
           done
           echo "ResourceManager UI is accessible."
