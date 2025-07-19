@@ -1,5 +1,9 @@
 services:
   namenode:
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     image: apache/hadoop:3
     hostname: namenode
     command: ["hdfs", "namenode"]
