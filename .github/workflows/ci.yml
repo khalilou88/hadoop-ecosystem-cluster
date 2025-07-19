@@ -64,6 +64,16 @@ jobs:
             done' || { echo "ResourceManager did not become healthy in time!"; exit 1; }
           echo "ResourceManager is healthy."
 
+      - name: Wait for HistoryServer to be healthy
+        # Wait for the MapReduce HistoryServer service to report as healthy.
+        run: |
+          echo "Waiting for HistoryServer to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps historyserver | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "HistoryServer did not become healthy in time!"; exit 1; }
+          echo "HistoryServer is healthy."
+
       - name: Verify HDFS connectivity
         # Execute a simple HDFS command inside the namenode container to verify HDFS is working.
         run: |
@@ -77,6 +87,56 @@ jobs:
           echo "Verifying YARN ResourceManager status..."
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
+
+      - name: Verify MapReduce framework
+        # Test MapReduce functionality by checking if MapReduce framework is properly configured
+        run: |
+          echo "Verifying MapReduce framework configuration..."
+          docker compose exec mapreduce-client mapred version
+          echo "MapReduce framework verified."
+
+      - name: Create test directory in HDFS
+        # Create a test directory structure for MapReduce job testing
+        run: |
+          echo "Creating test directories in HDFS..."
+          docker compose exec namenode hdfs dfs -mkdir -p /user/test/input
+          docker compose exec namenode hdfs dfs -mkdir -p /user/test/output
+          echo "Test directories created."
+
+      - name: Create test data for MapReduce
+        # Create sample data file for testing MapReduce jobs
+        run: |
+          echo "Creating test data..."
+          docker compose exec mapreduce-client bash -c "echo 'hello world' > /tmp/input.txt"
+          docker compose exec mapreduce-client bash -c "echo 'hello hadoop' >> /tmp/input.txt"
+          docker compose exec mapreduce-client bash -c "echo 'mapreduce test' >> /tmp/input.txt"
+          docker compose exec namenode hdfs dfs -put /tmp/input.txt /user/test/input/
+          echo "Test data uploaded to HDFS."
+
+      - name: Run MapReduce WordCount example
+        # Execute the classic WordCount MapReduce example to verify MapReduce functionality
+        run: |
+          echo "Running MapReduce WordCount example..."
+          docker compose exec mapreduce-client hadoop jar \
+            /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-*.jar \
+            wordcount /user/test/input /user/test/output/wordcount
+          echo "MapReduce WordCount job completed."
+
+      - name: Verify MapReduce job output
+        # Check the output of the MapReduce job to ensure it ran successfully
+        run: |
+          echo "Verifying MapReduce job output..."
+          docker compose exec namenode hdfs dfs -cat /user/test/output/wordcount/part-r-00000
+          echo "MapReduce job output verified."
+
+      - name: Check job history in HistoryServer
+        # Verify that the completed job appears in the MapReduce History Server
+        run: |
+          echo "Checking job history..."
+          # Give the history server a moment to process the completed job
+          sleep 10
+          docker compose exec historyserver curl -s "http://localhost:19888/ws/v1/history/mapreduce/jobs" | head -100
+          echo "Job history check completed."
 
       - name: Check NameNode UI accessibility
         # Use curl to check if the NameNode UI is responding.
@@ -99,6 +159,31 @@ jobs:
             echo -n "."; sleep 5;
           done
           echo "ResourceManager UI is accessible."
+
+      - name: Check HistoryServer UI accessibility
+        # Check if the MapReduce History Server UI is accessible
+        run: |
+          echo "Checking HistoryServer UI at http://localhost:19888..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19888)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "HistoryServer UI is accessible."
+
+      - name: Test MapReduce job submission via YARN
+        # Submit another MapReduce job to test YARN integration
+        run: |
+          echo "Testing MapReduce job submission via YARN..."
+          docker compose exec mapreduce-client hadoop jar \
+            /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-*.jar \
+            pi 2 10
+          echo "MapReduce Pi calculation job completed."
+
+      - name: Verify YARN application history
+        # Check that YARN shows the completed applications
+        run: |
+          echo "Verifying YARN application history..."
+          docker compose exec resourcemanager yarn application -list -appStates FINISHED
+          echo "YARN application history verified."
 
       - name: Stop Hadoop Cluster
         # Stop and remove all services, networks, and volumes created by Docker Compose.
