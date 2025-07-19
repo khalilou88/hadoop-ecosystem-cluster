@@ -23,6 +23,18 @@ jobs:
         run: |
           docker compose version
 
+      - name: Create Hive initialization script
+        # Create script to download MySQL JDBC driver for Hive
+        run: |
+          cat > init-hive.sh << 'EOF'
+          #!/bin/bash
+          echo "Downloading MySQL JDBC driver..."
+          wget -q https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.2.0.jar -O /opt/hive/lib/mysql-connector-j.jar
+          chmod 644 /opt/hive/lib/mysql-connector-j.jar
+          echo "MySQL JDBC driver downloaded successfully"
+          EOF
+          chmod +x init-hive.sh
+
       # - name: Format HDFS NameNode
       #   # This step formats the NameNode before starting the cluster.
       #   # It uses --rm to remove the container immediately after formatting.
@@ -223,7 +235,7 @@ jobs:
         # Test connection to Hive Metastore service
         run: |
           echo "Testing Hive Metastore connectivity..."
-          docker compose exec hive-client hive --service schematool -dbType postgres -info
+          docker compose exec hive-client hive --service schematool -dbType mysql -info
           echo "Hive Metastore connectivity verified."
 
       - name: Create Hive test database
@@ -333,7 +345,7 @@ jobs:
         # Verify that the Hive Metastore schema is properly initialized
         run: |
           echo "Verifying Hive Metastore schema..."
-          docker compose exec hive-metastore-db psql -U hive -d metastore -c "\dt" | head -10
+          docker compose exec hive-metastore-db mysql -u hive -phive123 -D metastore -e "SHOW TABLES;" | head -10
           echo "Hive Metastore schema verification completed."
 
       - name: Stop Hadoop Cluster
