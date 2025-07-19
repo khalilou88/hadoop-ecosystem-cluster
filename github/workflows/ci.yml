@@ -1,0 +1,85 @@
+name: Hadoop Cluster Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test-hadoop-cluster:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Docker Compose
+        # Docker Compose V2 is typically pre-installed on GitHub Actions runners.
+        # This step ensures it's available and shows the version.
+        run: |
+          docker compose version
+
+      - name: Format HDFS NameNode
+        # This step formats the NameNode before starting the cluster.
+        # It uses --rm to remove the container immediately after formatting.
+        run: docker compose run --rm namenode hdfs namenode -format
+
+      - name: Start Hadoop Cluster
+        # Start all services in detached mode
+        run: docker compose up -d
+
+      - name: Wait for NameNode to be healthy
+        # Wait for the NameNode service to report as healthy.
+        # This is crucial before interacting with HDFS.
+        # We check the health status of the 'namenode' service.
+        run: |
+          echo "Waiting for NameNode to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps namenode | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "NameNode did not become healthy in time!"; exit 1; }
+          echo "NameNode is healthy."
+
+      - name: Wait for DataNode to be healthy
+        # Wait for the DataNode service to report as healthy.
+        run: |
+          echo "Waiting for DataNode to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps datanode | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "DataNode did not become healthy in time!"; exit 1; }
+          echo "DataNode is healthy."
+
+      - name: Wait for ResourceManager to be healthy
+        # Wait for the ResourceManager service to report as healthy.
+        run: |
+          echo "Waiting for ResourceManager to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps resourcemanager | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "ResourceManager did not become healthy in time!"; exit 1; }
+          echo "ResourceManager is healthy."
+
+      - name: Verify HDFS connectivity
+        # Execute a simple HDFS command inside the namenode container to verify HDFS is working.
+        run: |
+          echo "Verifying HDFS connectivity by listing root directory..."
+          docker compose exec namenode hdfs dfs -ls /
+          echo "HDFS connectivity verified."
+
+      - name: Verify YARN ResourceManager status
+        # Execute a simple YARN command to verify ResourceManager is working.
+        run: |
+          echo "Verifying YARN ResourceManager status..."
+          docker compose exec resourcemanager yarn application -list -appStates ALL
+          echo "YARN ResourceManager status verified."
+
+      - name: Stop Hadoop Cluster
+        # Stop and remove all services, networks, and volumes created by Docker Compose.
+        # This ensures a clean state for subsequent runs.
+        if: always() # Run this step even if previous steps fail
+        run: docker compose down -v
