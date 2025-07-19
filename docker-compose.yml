@@ -18,7 +18,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-  
+
   datanode:
     image: apache/hadoop:3
     hostname: datanode
@@ -65,4 +65,48 @@ services:
       - ./config
     # depends_on:
     #   resourcemanager:
+    #     condition: service_healthy
+
+  # MapReduce History Server
+  historyserver:
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    image: apache/hadoop:3
+    hostname: historyserver
+    command: ["mapred", "historyserver"]
+    ports:
+      - 19888:19888
+    env_file:
+      - ./config
+    volumes:
+      - ./test.sh:/opt/test.sh
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
+    #   resourcemanager:
+    #     condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19888/ws/v1/history/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MapReduce Client/Submit Node
+  mapreduce-client:
+    image: apache/hadoop:3
+    hostname: mapreduce-client
+    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    env_file:
+      - ./config
+    volumes:
+      - ./test.sh:/opt/test.sh
+      - ./mapreduce-jobs:/opt/mapreduce-jobs  # Mount directory for job files
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
+    #   resourcemanager:
+    #     condition: service_healthy
+    #   historyserver:
     #     condition: service_healthy
