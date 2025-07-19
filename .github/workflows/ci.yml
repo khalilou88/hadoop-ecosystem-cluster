@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Docker Compose
+      - name: Docker Compose version
         # Docker Compose V2 is typically pre-installed on GitHub Actions runners.
         # This step ensures it's available and shows the version.
         run: |
