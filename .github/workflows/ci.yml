@@ -93,10 +93,9 @@ jobs:
           echo "NameNode UI is accessible."
 
       - name: Check ResourceManager UI accessibility
-        # Use curl -s -I to get only headers, then parse the HTTP status code.
         run: |
           echo "Checking ResourceManager UI at http://localhost:8088..."
-          until [ "$(curl -s -I http://localhost:8088 | head -n 1 | awk '{print $2}')" == "200" ]; do
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088)" == "302" ]; do
             echo -n "."; sleep 5;
           done
           echo "ResourceManager UI is accessible."
