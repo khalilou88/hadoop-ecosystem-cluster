@@ -2,104 +2,31 @@ services:
   namenode:
     image: apache/hadoop:3
     hostname: namenode
-    ports:
-      - "9870:9870" # Hadoop UI
-      - "9000:9000" # HDFS default port
-    volumes:
-      - namenode_data:/hadoop/dfs/name
-    environment:
-      # Set Hadoop environment variables
-      HADOOP_CONF_DIR: /etc/hadoop
-      HDFS_NAMENODE_USER: root
-      HADOOP_HEAPSIZE: 1024 # Adjust as needed
-      # Ensure SSH is running for internal communication (if needed for advanced setups)
-      # SSH_PORT: 22
-    networks:
-      - hadoop_net
     command: ["hdfs", "namenode"]
-    user: root
-    healthcheck:
-      test: ["CMD", "hdfs", "dfsadmin", "-report"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
+    ports:
+      - 9870:9870
+    env_file:
+      - ./config
+    environment:
+      ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
   datanode:
     image: apache/hadoop:3
-    hostname: datanode
-    volumes:
-      - datanode_data:/hadoop/dfs/data
-    environment:
-      HADOOP_CONF_DIR: /etc/hadoop
-      HDFS_DATANODE_USER: root
-      HADOOP_HEAPSIZE: 1024 # Adjust as needed
-    networks:
-      - hadoop_net
     command: ["hdfs", "datanode"]
-    depends_on:
-      namenode:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "hdfs", "dfsadmin", "-report"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
+    env_file:
+      - ./config
   resourcemanager:
     image: apache/hadoop:3
     hostname: resourcemanager
-    ports:
-      - "8088:8088" # YARN UI
-    environment:
-      HADOOP_CONF_DIR: /etc/hadoop
-      YARN_RESOURCEMANAGER_USER: root
-      HADOOP_HEAPSIZE: 1024 # Adjust as needed
-    networks:
-      - hadoop_net
     command: ["yarn", "resourcemanager"]
-    depends_on:
-      namenode:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "jps | grep ResourceManager"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
+    ports:
+      - 8088:8088
+    env_file:
+      - ./config
+    volumes:
+      - ./test.sh:/opt/test.sh
   nodemanager:
     image: apache/hadoop:3
-    hostname: nodemanager
-    environment:
-      HADOOP_CONF_DIR: /etc/hadoop
-      YARN_NODEMANAGER_USER: root
-      HADOOP_HEAPSIZE: 1024 # Adjust as needed
-    networks:
-      - hadoop_net
     command: ["yarn", "nodemanager"]
-    depends_on:
-      resourcemanager:
-        condition: service_healthy
+    env_file:
+      - ./config
 
-  historyserver:
-    image: apache/hadoop:3
-    hostname: historyserver
-    ports:
-      - "8188:8188" # Job History UI
-    environment:
-      HADOOP_CONF_DIR: /etc/hadoop
-      MAPRED_HISTORYSERVER_USER: root
-      HADOOP_HEAPSIZE: 1024 # Adjust as needed
-    networks:
-      - hadoop_net
-    command: ["mapred", "historyserver"]
-    depends_on:
-      namenode:
-        condition: service_healthy
-
-volumes:
-  namenode_data:
-  datanode_data:
-
-networks:
-  hadoop_net:
-    driver: bridge
