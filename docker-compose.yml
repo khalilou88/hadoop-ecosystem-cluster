@@ -188,6 +188,7 @@ services:
     env_file:
       - ./config
     volumes:
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
       - ./test.sh:/opt/test.sh
       - ./hive-queries:/opt/hive-queries # Mount directory for query files
     # depends_on:
