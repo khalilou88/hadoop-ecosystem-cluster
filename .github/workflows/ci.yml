@@ -32,6 +32,12 @@ jobs:
         # Start all services in detached mode
         run: docker compose up -d
 
+      - name: Test 1
+        run: docker compose ps namenode
+
+      - name: Test 2
+        run: docker compose ps namenode | grep "healthy"
+
       - name: Wait for NameNode to be healthy
         # Wait for the NameNode service to report as healthy.
         # This is crucial before interacting with HDFS.
