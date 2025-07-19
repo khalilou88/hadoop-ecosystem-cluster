@@ -78,6 +78,29 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
+      - name: Check NameNode UI accessibility
+        # Use curl to check if the NameNode UI is responding.
+        # -f: Fail silently (no output on HTTP errors).
+        # -s: Silent mode (don't show progress meter or error messages).
+        # -S: Show error (when -s is used).
+        # -o /dev/null: Discard output.
+        # -w "%{http_code}": Output HTTP status code.
+        run: |
+          echo "Checking NameNode UI at http://localhost:9870..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9870)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "NameNode UI is accessible."
+
+      - name: Check ResourceManager UI accessibility
+        # Use curl to check if the ResourceManager UI is responding.
+        run: |
+          echo "Checking ResourceManager UI at http://localhost:8088..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "ResourceManager UI is accessible."
+
       - name: Stop Hadoop Cluster
         # Stop and remove all services, networks, and volumes created by Docker Compose.
         # This ensures a clean state for subsequent runs.
