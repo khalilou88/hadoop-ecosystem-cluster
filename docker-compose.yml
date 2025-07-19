@@ -17,6 +17,7 @@ services:
     networks:
       - hadoop-net
     command: ["hdfs", "namenode"]
+    user: root
     healthcheck:
       test: ["CMD", "hdfs", "dfsadmin", "-report"]
       interval: 30s
