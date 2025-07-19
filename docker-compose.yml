@@ -35,6 +35,10 @@ services:
       retries: 5
 
   resourcemanager:
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     image: apache/hadoop:3
     hostname: resourcemanager
     command: ["yarn", "resourcemanager"]
