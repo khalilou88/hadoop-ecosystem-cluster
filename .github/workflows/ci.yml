@@ -196,7 +196,7 @@ jobs:
         # Check if the MapReduce History Server UI is accessible
         run: |
           echo "Checking HistoryServer UI at http://localhost:19888..."
-          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19888)" == "200" ]; do
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19888)" == "302" ]; do
             echo -n "."; sleep 5;
           done
           echo "HistoryServer UI is accessible."
