@@ -74,6 +74,36 @@ jobs:
             done' || { echo "HistoryServer did not become healthy in time!"; exit 1; }
           echo "HistoryServer is healthy."
 
+      - name: Wait for Hive Metastore DB to be healthy
+        # Wait for the PostgreSQL database for Hive Metastore to be healthy.
+        run: |
+          echo "Waiting for Hive Metastore DB to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hive-metastore-db | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Hive Metastore DB did not become healthy in time!"; exit 1; }
+          echo "Hive Metastore DB is healthy."
+
+      - name: Wait for Hive Metastore to be healthy
+        # Wait for the Hive Metastore service to report as healthy.
+        run: |
+          echo "Waiting for Hive Metastore to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hive-metastore | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Hive Metastore did not become healthy in time!"; exit 1; }
+          echo "Hive Metastore is healthy."
+
+      - name: Wait for HiveServer2 to be healthy
+        # Wait for the HiveServer2 service to report as healthy.
+        run: |
+          echo "Waiting for HiveServer2 to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hiveserver2 | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "HiveServer2 did not become healthy in time!"; exit 1; }
+          echo "HiveServer2 is healthy."
+
       - name: Verify HDFS connectivity
         # Execute a simple HDFS command inside the namenode container to verify HDFS is working.
         run: |
@@ -166,7 +196,7 @@ jobs:
         # Check if the MapReduce History Server UI is accessible
         run: |
           echo "Checking HistoryServer UI at http://localhost:19888..."
-          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19888)" == "302" ]; do
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19888)" == "200" ]; do
             echo -n "."; sleep 5;
           done
           echo "HistoryServer UI is accessible."
@@ -188,6 +218,123 @@ jobs:
           echo "Verifying YARN application history..."
           docker compose exec resourcemanager yarn application -list -appStates FINISHED
           echo "YARN application history verified."
+
+      - name: Test Hive Metastore connectivity
+        # Test connection to Hive Metastore service
+        run: |
+          echo "Testing Hive Metastore connectivity..."
+          docker compose exec hive-client hive --service schematool -dbType postgres -info
+          echo "Hive Metastore connectivity verified."
+
+      - name: Create Hive test database
+        # Create a test database in Hive
+        run: |
+          echo "Creating Hive test database..."
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "CREATE DATABASE IF NOT EXISTS testdb; SHOW DATABASES;" --silent=true
+          echo "Hive test database created."
+
+      - name: Create test data in HDFS for Hive
+        # Create sample CSV data for Hive table testing
+        run: |
+          echo "Creating test data for Hive tables..."
+          docker compose exec hive-client bash -c "echo 'id,name,age' > /tmp/employees.csv"
+          docker compose exec hive-client bash -c "echo '1,John,25' >> /tmp/employees.csv"
+          docker compose exec hive-client bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
+          docker compose exec hive-client bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
+          docker compose exec hive-client hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+          docker compose exec hive-client hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
+          echo "Test data created and uploaded to HDFS."
+
+      - name: Create Hive external table
+        # Create an external Hive table pointing to the test data
+        run: |
+          echo "Creating Hive external table..."
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; 
+                CREATE EXTERNAL TABLE IF NOT EXISTS employees (
+                  id INT,
+                  name STRING,
+                  age INT
+                ) 
+                ROW FORMAT DELIMITED 
+                FIELDS TERMINATED BY ',' 
+                STORED AS TEXTFILE 
+                LOCATION '/user/hive/warehouse/testdb.db/employees'
+                TBLPROPERTIES ('skip.header.line.count'='1');" --silent=true
+          echo "Hive external table created."
+
+      - name: Test Hive queries
+        # Execute various Hive queries to test functionality
+        run: |
+          echo "Testing Hive queries..."
+          echo "=== Showing tables ==="
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; SHOW TABLES;" --silent=true
+          
+          echo "=== Selecting all records ==="
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; SELECT * FROM employees;" --silent=true
+          
+          echo "=== Counting records ==="
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; SELECT COUNT(*) as total_employees FROM employees;" --silent=true
+          
+          echo "=== Average age ==="
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; SELECT AVG(age) as avg_age FROM employees;" --silent=true
+          echo "Hive queries executed successfully."
+
+      - name: Test Hive with MapReduce integration
+        # Test that Hive can execute MapReduce jobs
+        run: |
+          echo "Testing Hive with MapReduce integration..."
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; 
+                SET hive.exec.mode.local.auto=false;
+                SET mapreduce.job.reduces=1;
+                CREATE TABLE IF NOT EXISTS employee_summary AS 
+                SELECT 
+                  CASE 
+                    WHEN age < 30 THEN 'Young' 
+                    ELSE 'Senior' 
+                  END as age_group,
+                  COUNT(*) as count,
+                  AVG(age) as avg_age
+                FROM employees 
+                GROUP BY 
+                  CASE 
+                    WHEN age < 30 THEN 'Young' 
+                    ELSE 'Senior' 
+                  END;" --silent=true
+          
+          echo "=== Viewing MapReduce results ==="
+          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+            -e "USE testdb; SELECT * FROM employee_summary;" --silent=true
+          echo "Hive MapReduce integration test completed."
+
+      - name: Check HiveServer2 UI accessibility
+        # Check if the HiveServer2 Web UI is accessible
+        run: |
+          echo "Checking HiveServer2 UI at http://localhost:10002..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:10002)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "HiveServer2 UI is accessible."
+
+      - name: Test Hive CLI functionality
+        # Test the traditional Hive CLI (if available)
+        run: |
+          echo "Testing Hive CLI functionality..."
+          docker compose exec hive-client bash -c "echo 'SHOW DATABASES;' | hive --silent" || echo "Hive CLI not available, using Beeline only"
+          echo "Hive CLI test completed."
+
+      - name: Verify Hive Metastore schema
+        # Verify that the Hive Metastore schema is properly initialized
+        run: |
+          echo "Verifying Hive Metastore schema..."
+          docker compose exec hive-metastore-db psql -U hive -d metastore -c "\dt" | head -10
+          echo "Hive Metastore schema verification completed."
 
       - name: Stop Hadoop Cluster
         # Stop and remove all services, networks, and volumes created by Docker Compose.
