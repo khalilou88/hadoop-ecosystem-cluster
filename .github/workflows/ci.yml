@@ -186,7 +186,7 @@ jobs:
       #       # Attempt to install Scala and OpenJDK. This assumes a Debian/Ubuntu-based image.
       #       # For other base images (e.g., Alpine, CentOS), these commands would need to be adjusted.
       #       docker compose exec spark-client bash -c "apt-get update && apt-get install -y scala openjdk-11-jdk"
-            
+
       #       # Re-check if scalac is available after installation attempt
       #       SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
       #       if [ "$SCALAC_CHECK" = "not found" ]; then
@@ -239,19 +239,22 @@ jobs:
           echo "2. Verifying test data in HDFS..."
           docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
 
-          echo "3. Running Spark job to process HDFS data..."
+          echo "3. Creating Spark job script..."
+          docker compose exec spark-client bash -c 'cat > /tmp/spark_job.scala << EOF
+          val df = spark.read.option("header", "false").csv("hdfs://namenode/spark-test/input/spark_test.csv")
+          df.show()
+          df.write.mode("overwrite").csv("hdfs://namenode/spark-test/output")
+          println("Spark HDFS integration test completed")
+          System.exit(0)
+          EOF'
+
+          echo "4. Running Spark job to process HDFS data..."
           docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
             --driver-memory 512m --executor-memory 512m \
             --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            -c "
-            val df = spark.read.option(\"header\", \"false\").csv(\"hdfs://namenode/spark-test/input/spark_test.csv\");
-            df.show();
-            df.write.mode(\"overwrite\").csv(\"hdfs://namenode/spark-test/output\");
-            println(\"Spark HDFS integration test completed\");
-            System.exit(0)
-            "
+            -i /tmp/spark_job.scala
 
-          echo "4. Verifying Spark output in HDFS..."
+          echo "5. Verifying Spark output in HDFS..."
           docker compose exec namenode hdfs dfs -ls /spark-test/output/
           docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
 
