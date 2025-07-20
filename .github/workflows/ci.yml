@@ -138,7 +138,7 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
-      - name: Verify Spark cluster connectivity
+      - name: Test Spark with HDFS integration
         # Test basic Spark cluster connectivity and configuration
         run: |
           echo "=== Testing Spark with HDFS Integration ==="
@@ -182,13 +182,22 @@ jobs:
           SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
 
           if [ "$SCALAC_CHECK" = "not found" ]; then
-            echo "Error: 'scalac' (Scala compiler) not found in the spark-client container."
-            echo "To fix this, you need to ensure Scala is installed in your spark-client Docker image."
-            echo "Please modify your Dockerfile for the spark-client service to include Scala installation."
-            echo "Example for a Debian/Ubuntu based image:"
-            echo "  RUN apt-get update && apt-get install -y scala openjdk-11-jdk"
-            echo "Exiting due to missing Scala compiler."
-            exit 1
+            echo "Scala compiler 'scalac' not found. Attempting to install Scala and OpenJDK in spark-client container..."
+            # Attempt to install Scala and OpenJDK. This assumes a Debian/Ubuntu-based image.
+            # For other base images (e.g., Alpine, CentOS), these commands would need to be adjusted.
+            docker compose exec spark-client bash -c "apt-get update && apt-get install -y scala openjdk-11-jdk"
+            
+            # Re-check if scalac is available after installation attempt
+            SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
+            if [ "$SCALAC_CHECK" = "not found" ]; then
+              echo "Error: Failed to install 'scalac' (Scala compiler) in the spark-client container."
+              echo "Please ensure your spark-client Docker image is based on a distribution compatible with apt-get or adjust the installation commands."
+              exit 1
+            else
+              echo "Scala compiler 'scalac' installed successfully."
+            fi
+          else
+            echo "Scala compiler 'scalac' found."
           fi
 
           # Compile the Scala script into class files
