@@ -258,11 +258,10 @@ jobs:
           echo "=== Testing Spark Application Submission ==="
           echo "1. Creating a simple PySpark application..."
 
-          # Create directory with proper permissions
+          # Create directory without changing permissions
           mkdir -p ./spark-apps
-          chmod 755 ./spark-apps
 
-          # Create the Python file with corrected syntax
+          # Create the Python file with corrected syntax (note the fixed __name__)
           cat > ./spark-apps/word_count.py << 'EOF'
           from pyspark.sql import SparkSession
 
@@ -273,7 +272,7 @@ jobs:
               # Create sample data
               text_data = [
                   "Hello Spark World",
-                  "Spark is awesome", 
+                  "Spark is awesome",
                   "Big data processing with Spark"
               ]
               
@@ -290,13 +289,13 @@ jobs:
               spark.stop()
           EOF
 
-          # Set proper permissions on the file
-          chmod 644 ./spark-apps/word_count.py
-
           echo "2. Verifying file was created..."
           ls -la ./spark-apps/word_count.py
 
-          echo "3. Submitting PySpark application..."
+          echo "3. Checking file contents..."
+          head -5 ./spark-apps/word_count.py
+
+          echo "4. Submitting PySpark application..."
           docker compose exec spark-client spark-submit \
               --master spark://spark-master:7077 \
               --driver-memory 512m \
