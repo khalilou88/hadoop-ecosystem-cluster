@@ -13,8 +13,8 @@ services:
       - ./config
     environment:
       ENSURE_NAMENODE_DIR: "/tmp/hadoop-hadoop/dfs/name"
-    volumes:
-      - namenode-data:/tmp/hadoop-hadoop/dfs/name
+    # volumes:
+    #   - namenode-data:/tmp/hadoop-hadoop/dfs/name
     networks:
       - hadoop-network
     healthcheck:
