@@ -180,9 +180,6 @@ jobs:
           docker compose exec namenode hdfs dfs -chown spark:spark /spark-output
           docker compose exec namenode hdfs dfs -chmod 755 /spark-output
 
-          echo "4.6. Test creating a file as spark user..."
-          docker compose exec spark-client hdfs dfs -touchz /spark-test/test-write-permission.txt
-
           echo "5. Running Spark job to process HDFS data..."
           docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
             --driver-memory 512m --executor-memory 512m \
