@@ -517,7 +517,7 @@ jobs:
                 ROW FORMAT DELIMITED 
                 FIELDS TERMINATED BY ',' 
                 STORED AS TEXTFILE 
-                LOCATION '/user/hive/warehouse/testdb.db/employees'
+                LOCATION 'hdfs://namenode/user/hive/warehouse/testdb.db/employees'
                 TBLPROPERTIES ('skip.header.line.count'='1');" 2>&1
 
           # Capture the exit code
