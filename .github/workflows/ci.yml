@@ -26,7 +26,7 @@ jobs:
       - name: Format HDFS NameNode
         # This step formats the NameNode before starting the cluster.
         # It uses --rm to remove the container immediately after formatting.
-        run: docker compose run --rm namenode hdfs namenode -format
+        run: docker compose run --rm namenode hdfs namenode -format -force
 
       - name: Start Hadoop Cluster
         # Start all services in detached mode
