@@ -183,9 +183,9 @@ jobs:
             --driver-memory 512m --executor-memory 512m \
             --conf spark.sql.execution.arrow.pyspark.enabled=false \
             -c "
-            val df = spark.read.option(\"header\", \"false\").csv(\"hdfs://namenode:9000/spark-test/input/spark_test.csv\");
+            val df = spark.read.option(\"header\", \"false\").csv(\"hdfs://namenode/spark-test/input/spark_test.csv\");
             df.show();
-            df.write.mode(\"overwrite\").csv(\"hdfs://namenode:9000/spark-test/output\");
+            df.write.mode(\"overwrite\").csv(\"hdfs://namenode/spark-test/output\");
             println(\"Spark HDFS integration test completed\");
             System.exit(0)
             "
