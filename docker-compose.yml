@@ -13,6 +13,10 @@ services:
       - ./config
     environment:
       ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
+    volumes:
+      - namenode-data:/tmp/hadoop-root/dfs/name
+    networks:
+      - hadoop-network
     healthcheck:
       test: ["CMD", "hdfs", "dfsadmin", "-report"]
       interval: 30s
@@ -25,6 +29,10 @@ services:
     command: ["hdfs", "datanode"]
     env_file:
       - ./config
+    volumes:
+      - datanode-data:/tmp/hadoop-root/dfs/data
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -48,8 +56,12 @@ services:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
+    #     condition: service_healthy
+    #   datanode:
     #     condition: service_healthy
     healthcheck:
       test: ["CMD", "jps | grep ResourceManager"]
@@ -63,6 +75,8 @@ services:
     command: ["yarn", "nodemanager"]
     env_file:
       - ./config
+    networks:
+      - hadoop-network
     # depends_on:
     #   resourcemanager:
     #     condition: service_healthy
@@ -82,6 +96,8 @@ services:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -97,12 +113,14 @@ services:
   mapreduce-client:
     image: apache/hadoop:3
     hostname: mapreduce-client
-    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    command: ["tail", "-f", "/dev/null"] # Keep container running
     env_file:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
-      - ./mapreduce-jobs:/opt/mapreduce-jobs  # Mount directory for job files
+      - ./mapreduce-jobs:/opt/mapreduce-jobs # Mount directory for job files
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -110,3 +128,11 @@ services:
     #     condition: service_healthy
     #   historyserver:
     #     condition: service_healthy
+
+networks:
+  hadoop-network:
+    driver: bridge
+
+volumes:
+  namenode-data:
+  datanode-data:
