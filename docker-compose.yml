@@ -12,9 +12,9 @@ services:
     env_file:
       - ./config
     environment:
-      ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
+      ENSURE_NAMENODE_DIR: "/tmp/hadoop-hadoop/dfs/name"
     volumes:
-      - namenode-data:/tmp/hadoop-root/dfs/name
+      - namenode-data:/tmp/hadoop-hadoop/dfs/name
     networks:
       - hadoop-network
     healthcheck:
@@ -30,7 +30,7 @@ services:
     env_file:
       - ./config
     volumes:
-      - datanode-data:/tmp/hadoop-root/dfs/data
+      - datanode-data:/tmp/hadoop-hadoop/dfs/data
     networks:
       - hadoop-network
     # depends_on:
