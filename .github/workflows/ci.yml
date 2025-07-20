@@ -392,45 +392,20 @@ jobs:
           check_status "Listing testdb.db contents"
           echo ""
 
-          # Step 13: Upload file to HDFS (try multiple approaches)
-          log "Uploading CSV file to HDFS..."
+          # Step 13: Upload file to HDFS (using namenode - most reliable approach)
+          log "Uploading CSV file to HDFS using namenode container..."
 
-          log "Checking HDFS namenode port..."
-          docker compose exec namenode netstat -ln | grep :900 || log "Port 9000 info not available"
-          docker compose exec namenode netstat -ln | grep :802 || log "Port 8020 info not available"
+          log "Copying CSV file from hiveserver2 to namenode container..."
+          docker compose exec hiveserver2 cat /tmp/employees.csv | docker compose exec -T namenode bash -c "cat > /tmp/employees.csv"
+          check_status "Copying file to namenode container"
 
-          log "Approach 1: Upload via hiveserver2 with explicit HDFS URI (port 9000)..."
-          docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv hdfs://namenode:9000/user/hive/warehouse/testdb.db/employees/ 2>&1
-          RESULT_9000=$?
+          log "Verifying file copied to namenode:"
+          docker compose exec namenode cat /tmp/employees.csv 2>&1
+          check_status "Verifying file in namenode container"
 
-          if [ $RESULT_9000 -ne 0 ]; then
-              log "❌ Port 9000 failed, trying port 8020..."
-              docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv hdfs://namenode:8020/user/hive/warehouse/testdb.db/employees/ 2>&1
-              RESULT_8020=$?
-              
-              if [ $RESULT_8020 -ne 0 ]; then
-                  log "❌ Both explicit ports failed, trying default path again..."
-                  docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/ 2>&1
-                  RESULT_DEFAULT=$?
-                  
-                  if [ $RESULT_DEFAULT -ne 0 ]; then
-                      log "❌ All hiveserver2 approaches failed, copying to namenode..."
-                      # Copy file from hiveserver2 to namenode
-                      docker compose exec hiveserver2 cat /tmp/employees.csv | docker compose exec -T namenode bash -c "cat > /tmp/employees.csv"
-                      check_status "Copying file to namenode container"
-                      
-                      # Upload from namenode
-                      docker compose exec namenode hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/ 2>&1
-                      check_status "Uploading CSV file via namenode"
-                  else
-                      log "✅ Upload successful with default path on retry"
-                  fi
-              else
-                  log "✅ Upload successful with port 8020"
-              fi
-          else
-              log "✅ Upload successful with port 9000"
-          fi
+          log "Uploading file to HDFS from namenode container..."
+          docker compose exec namenode hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/ 2>&1
+          check_status "Uploading CSV file to HDFS"
           echo ""
 
           # Step 14: Verify file upload
