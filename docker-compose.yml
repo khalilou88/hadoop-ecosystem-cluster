@@ -215,7 +215,8 @@ services:
     env_file:
       - ./config
     environment:
-      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode:9000/spark-logs"
+#      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode:9000/spark-logs"
+      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode/spark-logs"
     volumes:
       - ./spark-apps:/opt/spark-apps
     networks:
