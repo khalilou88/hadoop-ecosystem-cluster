@@ -134,9 +134,13 @@ services:
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
-      SERVICE_OPTS: "-Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore -Djavax.jdo.option.ConnectionUserName=hive -Djavax.jdo.option.ConnectionPassword=hive123"
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver 
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore 
+        -Djavax.jdo.option.ConnectionUserName=hive 
+        -Djavax.jdo.option.ConnectionPassword=hive123
     volumes:
-      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql-42.7.7.jar
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql.jar
     env_file:
       - ./config
     ports:
@@ -158,17 +162,20 @@ services:
     hostname: hiveserver2
     environment:
       SERVICE_NAME: hiveserver2
-      SERVICE_OPTS: "-Dhive.metastore.uris=thrift://hive-metastore:9083"
       IS_RESUME: "true"
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver 
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore 
+        -Djavax.jdo.option.ConnectionUserName=hive 
+        -Djavax.jdo.option.ConnectionPassword=hive123
+        -Dhive.metastore.uris=thrift://hive-metastore:9083    
     env_file:
       - ./config
     ports:
       - 10000:10000 # HiveServer2 Thrift port
       - 10002:10002 # HiveServer2 Web UI
     volumes:
-      - ./test.sh:/opt/test.sh
-      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
-      - ./hive-queries:/opt/hive-queries # Mount directory for query files
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql.jar
     # depends_on:
     #   namenode:
     #     condition: service_healthy
