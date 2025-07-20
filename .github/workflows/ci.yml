@@ -138,93 +138,93 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
-      - name: Test Spark with HDFS integration
-        # Test basic Spark cluster connectivity and configuration
-        run: |
-          echo "=== Testing Spark with HDFS Integration ==="
+      # - name: Test Spark with HDFS integration
+      #   # Test basic Spark cluster connectivity and configuration
+      #   run: |
+      #     echo "=== Testing Spark with HDFS Integration ==="
 
-          echo "1. Creating test data in HDFS for Spark..."
-          docker compose exec namenode bash -c "echo -e '1,Alice,25\n2,Bob,30\n3,Charlie,35' > /tmp/spark_test.csv"
-          docker compose exec namenode hdfs dfs -mkdir -p /spark-test/input
-          docker compose exec namenode hdfs dfs -put /tmp/spark_test.csv /spark-test/input/
+      #     echo "1. Creating test data in HDFS for Spark..."
+      #     docker compose exec namenode bash -c "echo -e '1,Alice,25\n2,Bob,30\n3,Charlie,35' > /tmp/spark_test.csv"
+      #     docker compose exec namenode hdfs dfs -mkdir -p /spark-test/input
+      #     docker compose exec namenode hdfs dfs -put /tmp/spark_test.csv /spark-test/input/
 
-          echo "2. Verifying test data in HDFS..."
-          docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
+      #     echo "2. Verifying test data in HDFS..."
+      #     docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
 
-          echo "3. Running Spark job to process HDFS data using spark-submit..."
+      #     echo "3. Running Spark job to process HDFS data using spark-submit..."
 
-          # Create a temporary Scala script file on the spark-client container
-          # The file is named SparkHDFSIntegration.scala to match the object name
-          docker compose exec spark-client bash -c 'cat <<EOF > /tmp/SparkHDFSIntegration.scala
-          import org.apache.spark.sql.SparkSession
+      #     # Create a temporary Scala script file on the spark-client container
+      #     # The file is named SparkHDFSIntegration.scala to match the object name
+      #     docker compose exec spark-client bash -c 'cat <<EOF > /tmp/SparkHDFSIntegration.scala
+      #     import org.apache.spark.sql.SparkSession
 
-          object SparkHDFSIntegration {
-            def main(args: Array[String]): Unit = {
-              val spark = SparkSession.builder
-                .appName("Spark HDFS Integration Test")
-                .getOrCreate()
+      #     object SparkHDFSIntegration {
+      #       def main(args: Array[String]): Unit = {
+      #         val spark = SparkSession.builder
+      #           .appName("Spark HDFS Integration Test")
+      #           .getOrCreate()
 
-              println("Reading data from HDFS...")
-              val df = spark.read.option("header", "false").csv("hdfs://namenode/spark-test/input/spark_test.csv")
-              df.show()
+      #         println("Reading data from HDFS...")
+      #         val df = spark.read.option("header", "false").csv("hdfs://namenode/spark-test/input/spark_test.csv")
+      #         df.show()
 
-              println("Writing processed data to HDFS...")
-              df.write.mode("overwrite").csv("hdfs://namenode/spark-test/output")
+      #         println("Writing processed data to HDFS...")
+      #         df.write.mode("overwrite").csv("hdfs://namenode/spark-test/output")
 
-              println("Spark HDFS integration test completed successfully.")
-              spark.stop()
-            }
-          }
-          EOF'
+      #         println("Spark HDFS integration test completed successfully.")
+      #         spark.stop()
+      #       }
+      #     }
+      #     EOF'
 
-          # Check if scalac is available in the spark-client container
-          echo "Checking for Scala compiler (scalac) in spark-client container..."
-          SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
+      #     # Check if scalac is available in the spark-client container
+      #     echo "Checking for Scala compiler (scalac) in spark-client container..."
+      #     SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
 
-          if [ "$SCALAC_CHECK" = "not found" ]; then
-            echo "Scala compiler 'scalac' not found. Attempting to install Scala and OpenJDK in spark-client container..."
-            # Attempt to install Scala and OpenJDK. This assumes a Debian/Ubuntu-based image.
-            # For other base images (e.g., Alpine, CentOS), these commands would need to be adjusted.
-            docker compose exec spark-client bash -c "apt-get update && apt-get install -y scala openjdk-11-jdk"
+      #     if [ "$SCALAC_CHECK" = "not found" ]; then
+      #       echo "Scala compiler 'scalac' not found. Attempting to install Scala and OpenJDK in spark-client container..."
+      #       # Attempt to install Scala and OpenJDK. This assumes a Debian/Ubuntu-based image.
+      #       # For other base images (e.g., Alpine, CentOS), these commands would need to be adjusted.
+      #       docker compose exec spark-client bash -c "apt-get update && apt-get install -y scala openjdk-11-jdk"
             
-            # Re-check if scalac is available after installation attempt
-            SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
-            if [ "$SCALAC_CHECK" = "not found" ]; then
-              echo "Error: Failed to install 'scalac' (Scala compiler) in the spark-client container."
-              echo "Please ensure your spark-client Docker image is based on a distribution compatible with apt-get or adjust the installation commands."
-              exit 1
-            else
-              echo "Scala compiler 'scalac' installed successfully."
-            fi
-          else
-            echo "Scala compiler 'scalac' found."
-          fi
+      #       # Re-check if scalac is available after installation attempt
+      #       SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
+      #       if [ "$SCALAC_CHECK" = "not found" ]; then
+      #         echo "Error: Failed to install 'scalac' (Scala compiler) in the spark-client container."
+      #         echo "Please ensure your spark-client Docker image is based on a distribution compatible with apt-get or adjust the installation commands."
+      #         exit 1
+      #       else
+      #         echo "Scala compiler 'scalac' installed successfully."
+      #       fi
+      #     else
+      #       echo "Scala compiler 'scalac' found."
+      #     fi
 
-          # Compile the Scala script into class files
-          echo "Compiling Scala script..."
-          # We create a temporary directory for compiled classes and use scalac to compile the .scala file
-          docker compose exec spark-client bash -c "mkdir -p /tmp/classes && scalac -d /tmp/classes /tmp/SparkHDFSIntegration.scala"
+      #     # Compile the Scala script into class files
+      #     echo "Compiling Scala script..."
+      #     # We create a temporary directory for compiled classes and use scalac to compile the .scala file
+      #     docker compose exec spark-client bash -c "mkdir -p /tmp/classes && scalac -d /tmp/classes /tmp/SparkHDFSIntegration.scala"
 
-          # Create a JAR file from the compiled classes
-          echo "Creating JAR file from compiled classes..."
-          # We navigate into the classes directory and use the 'jar' command to package them into a JAR
-          docker compose exec spark-client bash -c "cd /tmp/classes && jar -cvf /tmp/spark-hdfs-test.jar ."
+      #     # Create a JAR file from the compiled classes
+      #     echo "Creating JAR file from compiled classes..."
+      #     # We navigate into the classes directory and use the 'jar' command to package them into a JAR
+      #     docker compose exec spark-client bash -c "cd /tmp/classes && jar -cvf /tmp/spark-hdfs-test.jar ."
 
-          # Submit the JAR file to Spark
-          echo "Submitting Spark job with the compiled JAR..."
-          docker compose exec spark-client spark-submit \
-            --class SparkHDFSIntegration \
-            --master spark://spark-master:7077 \
-            --driver-memory 512m \
-            --executor-memory 512m \
-            --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            /tmp/spark-hdfs-test.jar # This is the main application JAR
+      #     # Submit the JAR file to Spark
+      #     echo "Submitting Spark job with the compiled JAR..."
+      #     docker compose exec spark-client spark-submit \
+      #       --class SparkHDFSIntegration \
+      #       --master spark://spark-master:7077 \
+      #       --driver-memory 512m \
+      #       --executor-memory 512m \
+      #       --conf spark.sql.execution.arrow.pyspark.enabled=false \
+      #       /tmp/spark-hdfs-test.jar # This is the main application JAR
 
-          echo "4. Verifying Spark output in HDFS..."
-          docker compose exec namenode hdfs dfs -ls /spark-test/output/
-          docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
+      #     echo "4. Verifying Spark output in HDFS..."
+      #     docker compose exec namenode hdfs dfs -ls /spark-test/output/
+      #     docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
 
-          echo "Spark HDFS integration test completed."
+      #     echo "Spark HDFS integration test completed."
 
       - name: Test Spark with HDFS integration
         # Test Spark's ability to read from and write to HDFS
