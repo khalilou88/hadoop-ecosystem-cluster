@@ -215,6 +215,11 @@ services:
       timeout: 10s
       retries: 5
 
+
+networks:
+  hadoop-network:
+    driver: bridge
+
 volumes:
   namenode-data:
   datanode-data:
