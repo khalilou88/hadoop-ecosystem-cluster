@@ -310,19 +310,87 @@ jobs:
         run: |
           echo "=== Testing Spark with Hive Integration ==="
 
-          echo "1. Testing Spark-Hive connectivity..."
+          # Method 1: Using a temporary Scala file
+          echo "1. Testing Spark-Hive connectivity using temporary script file..."
+
+          # Create temporary Scala script
+          cat > /tmp/hive_test.scala << 'EOF'
+          spark.sql("SHOW DATABASES").show()
+          println("Spark-Hive integration test completed")
+          System.exit(0)
+          EOF
+
+          # Execute the script
           docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
             --driver-memory 512m --executor-memory 512m \
             --conf spark.sql.catalogImplementation=hive \
             --conf spark.sql.hive.metastore.uris=thrift://hive-metastore:9083 \
             --conf spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083 \
-            -c "
-            spark.sql(\"SHOW DATABASES\").show();
-            println(\"Spark-Hive integration test completed\");
-            System.exit(0)
-            " || echo "Hive integration test skipped (requires additional configuration)"
+            -i /tmp/hive_test.scala
 
-          echo "Spark-Hive integration test completed."
+          # Clean up
+          rm -f /tmp/hive_test.scala
+
+          echo ""
+          echo "=== Alternative Method 2: Using heredoc ==="
+
+          # Method 2: Using heredoc to pipe commands
+          docker compose exec spark-client bash -c '
+          spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.catalogImplementation=hive \
+            --conf spark.sql.hive.metastore.uris=thrift://hive-metastore:9083 \
+            --conf spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083 << EOF
+          spark.sql("SHOW DATABASES").show()
+          println("Spark-Hive integration test completed")
+          System.exit(0)
+          EOF
+          '
+
+          echo ""
+          echo "=== Alternative Method 3: Using spark-sql for simple queries ==="
+
+          # Method 3: Using spark-sql (simpler for basic SQL operations)
+          docker compose exec spark-client spark-sql --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.catalogImplementation=hive \
+            --conf spark.sql.hive.metastore.uris=thrift://hive-metastore:9083 \
+            --conf spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083 \
+            -e "SHOW DATABASES; SHOW TABLES;"
+
+          echo ""
+          echo "=== Alternative Method 4: Using spark-submit with a proper application ==="
+
+          # Create a simple Spark application
+          cat > /tmp/HiveTest.scala << 'EOF'
+          import org.apache.spark.sql.SparkSession
+
+          object HiveTest {
+            def main(args: Array[String]): Unit = {
+              val spark = SparkSession.builder()
+                .appName("Hive Integration Test")
+                .config("spark.sql.catalogImplementation", "hive")
+                .config("spark.sql.hive.metastore.uris", "thrift://hive-metastore:9083")
+                .config("spark.hadoop.hive.metastore.uris", "thrift://hive-metastore:9083")
+                .getOrCreate()
+              
+              try {
+                println("Testing Hive connectivity...")
+                spark.sql("SHOW DATABASES").show()
+                println("Hive integration test completed successfully!")
+              } catch {
+                case e: Exception => 
+                  println(s"Hive integration test failed: ${e.getMessage}")
+              } finally {
+                spark.stop()
+              }
+            }
+          }
+          EOF
+
+          echo "Created HiveTest.scala application for spark-submit testing"
+
+          echo "Spark-Hive integration test script completed."
 
       - name: Verify MapReduce framework
         # Test MapReduce functionality by checking if MapReduce framework is properly configured
