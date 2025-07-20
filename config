@@ -1,4 +1,5 @@
-HADOOP_HOME=
+HADOOP_HOME=/opt/hadoop
+HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
 
 # Hadoop Core Configuration
 CORE-SITE.XML_fs.default.name=hdfs://namenode
