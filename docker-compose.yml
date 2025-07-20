@@ -219,7 +219,7 @@ networks:
   hadoop-network:
     driver: bridge
 
-volumes:
+# volumes:
   # namenode-data:
   # datanode-data:
   # hive-metastore-db-data:
