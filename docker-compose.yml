@@ -159,7 +159,12 @@ services:
   spark-worker-1:
     image: apache/spark:3.5.3
     hostname: spark-worker-1
-    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    entrypoint:
+      [
+        "/opt/spark/bin/spark-class",
+        "org.apache.spark.deploy.worker.Worker",
+        "spark://spark-master:7077",
+      ]
     ports:
       - 8081:8081 # Spark Worker Web UI
     env_file:
@@ -182,7 +187,12 @@ services:
   spark-worker-2:
     image: apache/spark:3.5.3
     hostname: spark-worker-2
-    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    entrypoint:
+      [
+        "/opt/spark/bin/spark-class",
+        "org.apache.spark.deploy.worker.Worker",
+        "spark://spark-master:7077",
+      ]
     ports:
       - 8082:8081 # Spark Worker Web UI (mapped to different host port)
     env_file:
@@ -215,12 +225,12 @@ services:
     env_file:
       - ./config
     environment:
-#      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode:9000/spark-logs"
-#      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode/spark-logs"
+      #      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode:9000/spark-logs"
+      #      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=hdfs://namenode/spark-logs"
       SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:///tmp/spark-logs"
     volumes:
       - ./spark-apps:/opt/spark-apps
-      - ./spark-logs:/tmp/spark-logs  # Mount local directory
+      - ./spark-logs:/tmp/spark-logs # Mount local directory
     networks:
       - hadoop-network
     # depends_on:
