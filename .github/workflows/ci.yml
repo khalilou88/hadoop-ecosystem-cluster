@@ -182,7 +182,8 @@ jobs:
           echo "3. Running Spark job to process HDFS data using spark-submit..."
 
           # Create a temporary Scala script file on the spark-client container
-          docker compose exec spark-client bash -c 'cat <<EOF > /tmp/spark_job.scala
+          # The file is named SparkHDFSIntegration.scala to match the object name
+          docker compose exec spark-client bash -c 'cat <<EOF > /tmp/SparkHDFSIntegration.scala
           import org.apache.spark.sql.SparkSession
 
           object SparkHDFSIntegration {
@@ -204,14 +205,25 @@ jobs:
           }
           EOF'
 
-          # Submit the Scala script using spark-submit
+          # Compile the Scala script into class files
+          echo "Compiling Scala script..."
+          # We create a temporary directory for compiled classes and use scalac to compile the .scala file
+          docker compose exec spark-client bash -c "mkdir -p /tmp/classes && scalac -d /tmp/classes /tmp/SparkHDFSIntegration.scala"
+
+          # Create a JAR file from the compiled classes
+          echo "Creating JAR file from compiled classes..."
+          # We navigate into the classes directory and use the 'jar' command to package them into a JAR
+          docker compose exec spark-client bash -c "cd /tmp/classes && jar -cvf /tmp/spark-hdfs-test.jar ."
+
+          # Submit the JAR file to Spark
+          echo "Submitting Spark job with the compiled JAR..."
           docker compose exec spark-client spark-submit \
             --class SparkHDFSIntegration \
             --master spark://spark-master:7077 \
             --driver-memory 512m \
             --executor-memory 512m \
             --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            /tmp/spark_job.scala
+            /tmp/spark-hdfs-test.jar # This is the main application JAR
 
           echo "4. Verifying Spark output in HDFS..."
           docker compose exec namenode hdfs dfs -ls /spark-test/output/
