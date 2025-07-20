@@ -220,11 +220,12 @@ jobs:
           echo "YARN application history verified."
 
       - name: Test Hive Metastore connectivity
-        # Test connection to Hive Metastore service using HiveServer2 container
+        # Test connection to Hive Metastore service by checking if beeline can connect and show databases
         run: |
-          echo "Testing Hive Metastore connectivity..."
-          docker compose exec hiveserver2 hive --service schemaTool -dbType postgres -info
-          echo "Hive Metastore connectivity verified."
+          echo "Testing Hive Metastore connectivity via beeline..."
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "SHOW DATABASES;" --silent=true --showHeader=false --outputformat=tsv2 | head -5
+          echo "Hive Metastore connectivity verified via HiveServer2."
 
       - name: Create Hive test database
         # Create a test database in Hive using beeline from HiveServer2 container
