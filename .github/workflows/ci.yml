@@ -223,7 +223,7 @@ jobs:
         # Test connection to Hive Metastore service using HiveServer2 container
         run: |
           echo "Testing Hive Metastore connectivity..."
-          docker compose exec hiveserver2 hive --service schematool -dbType postgres -info
+          docker compose exec hiveserver2 hive --service schemaTool -dbType postgres -info
           echo "Hive Metastore connectivity verified."
 
       - name: Create Hive test database
