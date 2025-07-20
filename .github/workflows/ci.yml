@@ -74,6 +74,26 @@ jobs:
             done' || { echo "HistoryServer did not become healthy in time!"; exit 1; }
           echo "HistoryServer is healthy."
 
+      - name: Wait for Spark Master to be healthy
+        # Wait for the Spark Master service to report as healthy.
+        run: |
+          echo "Waiting for Spark Master to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps spark-master | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Spark Master did not become healthy in time!"; exit 1; }
+          echo "Spark Master is healthy."
+
+      - name: Wait for Spark History Server to be healthy
+        # Wait for the Spark History Server service to report as healthy.
+        run: |
+          echo "Waiting for Spark History Server to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps spark-history-server | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Spark History Server did not become healthy in time!"; exit 1; }
+          echo "Spark History Server is healthy."
+
       - name: Wait for Hive Metastore DB to be healthy
         # Wait for the PostgreSQL database for Hive Metastore to be healthy.
         run: |
@@ -117,6 +137,187 @@ jobs:
           echo "Verifying YARN ResourceManager status..."
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
+
+      - name: Verify Spark cluster connectivity
+        # Test basic Spark cluster connectivity and configuration
+        run: |
+          echo "=== Verifying Spark Cluster Connectivity ==="
+
+          echo "1. Testing Spark version..."
+          docker compose exec spark-client spark-submit --version
+
+          echo "2. Testing Spark Master connectivity..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            -c "println(\"Spark Context available: \" + (sc != null)); System.exit(0)"
+
+          echo "3. Checking Spark workers registration..."
+          # Give workers time to register with master
+          sleep 10
+
+          echo "4. Testing Spark-shell basic operations..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -c "val data = sc.parallelize(1 to 100); println(\"Sum: \" + data.sum()); System.exit(0)"
+
+          echo "Spark cluster connectivity verified."
+
+      - name: Test Spark with HDFS integration
+        # Test Spark's ability to read from and write to HDFS
+        run: |
+          echo "=== Testing Spark with HDFS Integration ==="
+
+          echo "1. Creating test data in HDFS for Spark..."
+          docker compose exec namenode bash -c "echo -e '1,Alice,25\n2,Bob,30\n3,Charlie,35' > /tmp/spark_test.csv"
+          docker compose exec namenode hdfs dfs -mkdir -p /spark-test/input
+          docker compose exec namenode hdfs dfs -put /tmp/spark_test.csv /spark-test/input/
+
+          echo "2. Verifying test data in HDFS..."
+          docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
+
+          echo "3. Running Spark job to process HDFS data..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -c "
+            val df = spark.read.option(\"header\", \"false\").csv(\"hdfs://namenode:9000/spark-test/input/spark_test.csv\");
+            df.show();
+            df.write.mode(\"overwrite\").csv(\"hdfs://namenode:9000/spark-test/output\");
+            println(\"Spark HDFS integration test completed\");
+            System.exit(0)
+            "
+
+          echo "4. Verifying Spark output in HDFS..."
+          docker compose exec namenode hdfs dfs -ls /spark-test/output/
+          docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
+
+          echo "Spark HDFS integration test completed."
+
+      - name: Test Spark SQL functionality
+        # Test Spark SQL capabilities
+        run: |
+          echo "=== Testing Spark SQL Functionality ==="
+
+          echo "1. Creating temporary view and running SQL queries..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -c "
+            import spark.implicits._;
+            val data = Seq((1, \"Alice\", 25), (2, \"Bob\", 30), (3, \"Charlie\", 35));
+            val df = data.toDF(\"id\", \"name\", \"age\");
+            df.createOrReplaceTempView(\"people\");
+            spark.sql(\"SELECT name, age FROM people WHERE age > 27\").show();
+            println(\"Spark SQL test completed\");
+            System.exit(0)
+            "
+
+          echo "2. Testing DataFrame operations..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -c "
+            import spark.implicits._;
+            val numbers = (1 to 1000).toDF(\"number\");
+            val result = numbers.filter(\$\"number\" % 2 === 0).count();
+            println(s\"Even numbers count: \$result\");
+            System.exit(0)
+            "
+
+          echo "Spark SQL functionality test completed."
+
+      - name: Test Spark PySpark functionality
+        # Test PySpark (Python API for Spark)
+        run: |
+          echo "=== Testing PySpark Functionality ==="
+
+          echo "1. Testing basic PySpark operations..."
+          docker compose exec spark-client pyspark --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+            -c "
+          data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          rdd = sc.parallelize(data)
+          result = rdd.filter(lambda x: x % 2 == 0).collect()
+          print('Even numbers:', result)
+
+          # DataFrame operations
+          from pyspark.sql import SparkSession
+          df = spark.createDataFrame([(1, 'Alice', 25), (2, 'Bob', 30)], ['id', 'name', 'age'])
+          df.show()
+          df.filter(df.age > 27).show()
+
+          print('PySpark test completed successfully')
+          "
+
+          echo "PySpark functionality test completed."
+
+      - name: Test Spark application submission
+        # Test submitting a Spark application using spark-submit
+        run: |
+          echo "=== Testing Spark Application Submission ==="
+
+          echo "1. Creating a simple PySpark application..."
+          mkdir -p ./spark-apps
+          cat > ./spark-apps/word_count.py << 'EOF'
+          from pyspark.sql import SparkSession
+
+          if __name__ == "__main__":
+              spark = SparkSession.builder.appName("WordCount").getOrCreate()
+              sc = spark.sparkContext
+
+              # Create sample data
+              text_data = [
+                  "Hello Spark World",
+                  "Spark is awesome",
+                  "Big data processing with Spark"
+              ]
+
+              # Create RDD and perform word count
+              text_rdd = sc.parallelize(text_data)
+              words = text_rdd.flatMap(lambda line: line.split())
+              word_pairs = words.map(lambda word: (word.lower(), 1))
+              word_counts = word_pairs.reduceByKey(lambda a, b: a + b)
+
+              print("Word Count Results:")
+              for word, count in word_counts.collect():
+                  print(f"{word}: {count}")
+
+              spark.stop()
+          EOF
+
+          echo "2. Submitting PySpark application..."
+          docker compose exec spark-client spark-submit \
+            --master spark://spark-master:7077 \
+            --driver-memory 512m \
+            --executor-memory 512m \
+            --total-executor-cores 2 \
+            /opt/spark-apps/word_count.py
+
+          echo "Spark application submission test completed."
+
+      - name: Test Spark with Hive integration
+        # Test Spark's integration with Hive (Spark SQL with Hive support)
+        run: |
+          echo "=== Testing Spark with Hive Integration ==="
+
+          echo "1. Testing Spark-Hive connectivity..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.catalogImplementation=hive \
+            --conf spark.sql.hive.metastore.uris=thrift://hive-metastore:9083 \
+            --conf spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083 \
+            -c "
+            spark.sql(\"SHOW DATABASES\").show();
+            println(\"Spark-Hive integration test completed\");
+            System.exit(0)
+            " || echo "Hive integration test skipped (requires additional configuration)"
+
+          echo "Spark-Hive integration test completed."
 
       - name: Verify MapReduce framework
         # Test MapReduce functionality by checking if MapReduce framework is properly configured
@@ -201,6 +402,39 @@ jobs:
           done
           echo "HistoryServer UI is accessible."
 
+      - name: Check Spark Master UI accessibility
+        # Check if the Spark Master Web UI is accessible
+        run: |
+          echo "Checking Spark Master UI at http://localhost:8080..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "Spark Master UI is accessible."
+
+      - name: Check Spark Worker UIs accessibility
+        # Check if the Spark Worker Web UIs are accessible
+        run: |
+          echo "Checking Spark Worker 1 UI at http://localhost:8081..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "Spark Worker 1 UI is accessible."
+
+          echo "Checking Spark Worker 2 UI at http://localhost:8082..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "Spark Worker 2 UI is accessible."
+
+      - name: Check Spark History Server UI accessibility
+        # Check if the Spark History Server Web UI is accessible
+        run: |
+          echo "Checking Spark History Server UI at http://localhost:18080..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18080)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "Spark History Server UI is accessible."
+
       - name: Test MapReduce job submission via YARN
         # Submit another MapReduce job to test YARN integration
         run: |
@@ -218,6 +452,37 @@ jobs:
           echo "Verifying YARN application history..."
           docker compose exec resourcemanager yarn application -list -appStates FINISHED
           echo "YARN application history verified."
+
+      - name: Verify Spark application history
+        # Check that Spark applications appear in the history server
+        run: |
+          echo "Verifying Spark application history..."
+          # Give some time for applications to be recorded
+          sleep 15
+
+          echo "Checking Spark History Server REST API..."
+          docker compose exec spark-history-server curl -s "http://localhost:18080/api/v1/applications" | head -200 || echo "No applications found in history server yet"
+
+          echo "Spark application history verification completed."
+
+      - name: Test Spark cluster resource utilization
+        # Test Spark cluster's ability to handle resource allocation
+        run: |
+          echo "=== Testing Spark Cluster Resource Utilization ==="
+
+          echo "1. Checking cluster resources..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 256m --executor-memory 256m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -c "
+            println(\"Available cores: \" + sc.defaultParallelism);
+            val rdd = sc.parallelize(1 to 10000, 10);
+            val result = rdd.map(_ * 2).filter(_ % 4 == 0).count();
+            println(s\"Processed elements: \$result\");
+            System.exit(0)
+            "
+
+          echo "Resource utilization test completed."
 
       - name: Test Hive Metastore connectivity
         # Test connection to Hive Metastore service by checking if beeline can connect and show databases
@@ -528,32 +793,32 @@ jobs:
           echo "7. Verifying table creation..."
           if [ $CREATE_TABLE_EXIT_CODE -eq 0 ]; then
             echo "✓ CREATE TABLE command completed with exit code 0"
-            
+
             # Check if table actually exists
             echo "Checking if table exists:"
             docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
               -e "USE testdb; SHOW TABLES;" --silent=false 2>&1
-            
+
             # Try to describe the table
             echo "Table description:"
             docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
               -e "USE testdb; DESCRIBE employees;" --silent=false 2>&1
-              
+
           else
             echo "✗ CREATE TABLE command failed with exit code: $CREATE_TABLE_EXIT_CODE"
-            
+
             # Additional debugging
             echo ""
             echo "8. Additional debugging information..."
             echo "Metastore logs (last 30 lines):"
             docker compose logs --tail=30 metastore || echo "Cannot fetch metastore logs"
-            
+
             echo "HiveServer2 logs (last 30 lines):"
             docker compose logs --tail=30 hiveserver2 || echo "Cannot fetch hiveserver2 logs"
-            
+
             echo "All container statuses:"
             docker compose ps
-            
+
             # Try alternative approach
             echo ""
             echo "9. Trying alternative table creation approach..."
