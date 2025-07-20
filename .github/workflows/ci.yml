@@ -545,7 +545,7 @@ jobs:
 
           echo "1. Checking cluster resources..."
           docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
-            --driver-memory 512m --executor-memory 256m \
+            --driver-memory 512m --executor-memory 512m \
             --conf spark.sql.execution.arrow.pyspark.enabled=false \
             -c "
             println(\"Available cores: \" + sc.defaultParallelism);
