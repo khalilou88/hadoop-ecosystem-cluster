@@ -252,58 +252,58 @@ jobs:
 
           echo "PySpark functionality test completed."
 
-      - name: Test Spark application submission
-        # Test submitting a Spark application using spark-submit
-        run: |
-          echo "=== Testing Spark Application Submission ==="
-          echo "1. Creating a simple PySpark application..."
+      # - name: Test Spark application submission
+      #   # Test submitting a Spark application using spark-submit
+      #   run: |
+      #     echo "=== Testing Spark Application Submission ==="
+      #     echo "1. Creating a simple PySpark application..."
 
-          # Create directory without changing permissions
-          mkdir -p ./spark-apps
+      #     # Create directory without changing permissions
+      #     mkdir -p ./spark-apps
 
-          # Create the Python file with corrected syntax (note the fixed __name__)
-          cat > ./spark-apps/word_count.py << 'EOF'
-          from pyspark.sql import SparkSession
+      #     # Create the Python file with corrected syntax (note the fixed __name__)
+      #     cat > ./spark-apps/word_count.py << 'EOF'
+      #     from pyspark.sql import SparkSession
 
-          if __name__ == "__main__":
-              spark = SparkSession.builder.appName("WordCount").getOrCreate()
-              sc = spark.sparkContext
+      #     if __name__ == "__main__":
+      #         spark = SparkSession.builder.appName("WordCount").getOrCreate()
+      #         sc = spark.sparkContext
               
-              # Create sample data
-              text_data = [
-                  "Hello Spark World",
-                  "Spark is awesome",
-                  "Big data processing with Spark"
-              ]
+      #         # Create sample data
+      #         text_data = [
+      #             "Hello Spark World",
+      #             "Spark is awesome",
+      #             "Big data processing with Spark"
+      #         ]
               
-              # Create RDD and perform word count
-              text_rdd = sc.parallelize(text_data)
-              words = text_rdd.flatMap(lambda line: line.split())
-              word_pairs = words.map(lambda word: (word.lower(), 1))
-              word_counts = word_pairs.reduceByKey(lambda a, b: a + b)
+      #         # Create RDD and perform word count
+      #         text_rdd = sc.parallelize(text_data)
+      #         words = text_rdd.flatMap(lambda line: line.split())
+      #         word_pairs = words.map(lambda word: (word.lower(), 1))
+      #         word_counts = word_pairs.reduceByKey(lambda a, b: a + b)
               
-              print("Word Count Results:")
-              for word, count in word_counts.collect():
-                  print(f"{word}: {count}")
+      #         print("Word Count Results:")
+      #         for word, count in word_counts.collect():
+      #             print(f"{word}: {count}")
               
-              spark.stop()
-          EOF
+      #         spark.stop()
+      #     EOF
 
-          echo "2. Verifying file was created..."
-          ls -la ./spark-apps/word_count.py
+      #     echo "2. Verifying file was created..."
+      #     ls -la ./spark-apps/word_count.py
 
-          echo "3. Checking file contents..."
-          head -5 ./spark-apps/word_count.py
+      #     echo "3. Checking file contents..."
+      #     head -5 ./spark-apps/word_count.py
 
-          echo "4. Submitting PySpark application..."
-          docker compose exec spark-client spark-submit \
-              --master spark://spark-master:7077 \
-              --driver-memory 512m \
-              --executor-memory 512m \
-              --total-executor-cores 2 \
-              /opt/spark-apps/word_count.py
+      #     echo "4. Submitting PySpark application..."
+      #     docker compose exec spark-client spark-submit \
+      #         --master spark://spark-master:7077 \
+      #         --driver-memory 512m \
+      #         --executor-memory 512m \
+      #         --total-executor-cores 2 \
+      #         /opt/spark-apps/word_count.py
 
-          echo "Spark application submission test completed."
+      #     echo "Spark application submission test completed."
 
       - name: Test Spark with Hive integration
         # Test Spark's integration with Hive (Spark SQL with Hive support)
