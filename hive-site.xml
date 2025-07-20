@@ -1,30 +1,105 @@
 <?xml version="1.0"?>
 <configuration>
-    <!-- Metastore connection -->
+    <!-- Metastore Connection Configuration -->
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:postgresql://hive-metastore-db:5432/metastore</value>
+        <description>PostgreSQL JDBC connection URL</description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.postgresql.Driver</value>
+        <description>PostgreSQL JDBC driver class</description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>hive</value>
+        <description>PostgreSQL database username</description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>hive123</value>
+        <description>PostgreSQL database password</description>
+    </property>
+
+    <!-- Metastore Service Configuration -->
     <property>
         <name>hive.metastore.uris</name>
         <value>thrift://hive-metastore:9083</value>
-        <description>Thrift URI for the remote metastore</description>
+        <description>Metastore service URI</description>
     </property>
 
-    <!-- Disable local metastore -->
     <property>
         <name>hive.metastore.local</name>
         <value>false</value>
         <description>Use remote metastore</description>
     </property>
 
-    <!-- Warehouse directory (should match your HDFS setup) -->
+    <!-- Warehouse Configuration -->
     <property>
         <name>hive.metastore.warehouse.dir</name>
         <value>/user/hive/warehouse</value>
-        <description>Hive warehouse directory</description>
+        <description>Location of default database for the warehouse</description>
     </property>
 
-    <!-- Schema verification -->
+    <!-- HiveServer2 Configuration -->
+    <property>
+        <name>hive.server2.thrift.bind.host</name>
+        <value>0.0.0.0</value>
+        <description>Bind host for HiveServer2 Thrift interface</description>
+    </property>
+
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>10000</value>
+        <description>Port number of HiveServer2 Thrift interface</description>
+    </property>
+
+    <property>
+        <name>hive.server2.transport.mode</name>
+        <value>binary</value>
+        <description>Transport mode for HiveServer2</description>
+    </property>
+
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>false</value>
+        <description>Enable user impersonation for HiveServer2</description>
+    </property>
+
+    <!-- Prevent Derby usage -->
     <property>
         <name>hive.metastore.schema.verification</name>
         <value>false</value>
-        <description>Disable schema verification for client</description>
+        <description>Disable schema verification to prevent Derby fallback</description>
+    </property>
+
+    <!-- HDFS Configuration -->
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://namenode:9000</value>
+        <description>Default filesystem URI</description>
+    </property>
+
+    <!-- MapReduce Configuration -->
+    <property>
+        <name>mapreduce.framework.name</name>
+        <value>yarn</value>
+        <description>MapReduce framework name</description>
+    </property>
+
+    <property>
+        <name>yarn.resourcemanager.address</name>
+        <value>resourcemanager:8032</value>
+        <description>ResourceManager address</description>
+    </property>
+
+    <property>
+        <name>yarn.resourcemanager.scheduler.address</name>
+        <value>resourcemanager:8030</value>
+        <description>ResourceManager scheduler address</description>
     </property>
 </configuration>
