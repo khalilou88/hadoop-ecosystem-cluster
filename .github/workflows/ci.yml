@@ -424,17 +424,17 @@ jobs:
           log "Timestamp: $(date)"
           log "============================================"
 
-      - name: Create test data in HDFS for Hive
-        # Create sample CSV data for Hive table testing using HiveServer2 container
-        run: |
-          echo "Creating test data for Hive tables..."
-          docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv"
-          docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv"
-          docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
-          docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
-          docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
-          docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
-          echo "Test data created and uploaded to HDFS."
+      # - name: Create test data in HDFS for Hive
+      #   # Create sample CSV data for Hive table testing using HiveServer2 container
+      #   run: |
+      #     echo "Creating test data for Hive tables..."
+      #     docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+      #     docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
+      #     echo "Test data created and uploaded to HDFS."
 
       - name: Create Hive external table
         # Create an external Hive table pointing to the test data using beeline from HiveServer2
