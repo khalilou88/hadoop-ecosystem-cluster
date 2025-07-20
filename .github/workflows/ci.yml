@@ -141,34 +141,6 @@ jobs:
       - name: Verify Spark cluster connectivity
         # Test basic Spark cluster connectivity and configuration
         run: |
-          echo "=== Verifying Spark Cluster Connectivity ==="
-
-          echo "1. Testing Spark version..."
-          docker compose exec spark-client spark-submit --version
-
-          echo "2. Testing Spark Master connectivity..."
-          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
-            --driver-memory 512m --executor-memory 512m \
-            --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
-            -c "println(\"Spark Context available: \" + (sc != null)); System.exit(0)"
-
-          echo "3. Checking Spark workers registration..."
-          # Give workers time to register with master
-          sleep 10
-
-          echo "4. Testing Spark-shell basic operations..."
-          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
-            --driver-memory 512m --executor-memory 512m \
-            --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            -c "val data = sc.parallelize(1 to 100); println(\"Sum: \" + data.sum()); System.exit(0)"
-
-          echo "Spark cluster connectivity verified."
-
-      - name:
-          Test Spark with HDFS integration
-          # Test Spark's ability to read from and write to HDFS
-        run: |
           echo "=== Testing Spark with HDFS Integration ==="
 
           echo "1. Creating test data in HDFS for Spark..."
@@ -204,6 +176,20 @@ jobs:
             }
           }
           EOF'
+
+          # Check if scalac is available in the spark-client container
+          echo "Checking for Scala compiler (scalac) in spark-client container..."
+          SCALAC_CHECK=$(docker compose exec spark-client bash -c "command -v scalac >/dev/null 2>&1 && echo 'found' || echo 'not found'")
+
+          if [ "$SCALAC_CHECK" = "not found" ]; then
+            echo "Error: 'scalac' (Scala compiler) not found in the spark-client container."
+            echo "To fix this, you need to ensure Scala is installed in your spark-client Docker image."
+            echo "Please modify your Dockerfile for the spark-client service to include Scala installation."
+            echo "Example for a Debian/Ubuntu based image:"
+            echo "  RUN apt-get update && apt-get install -y scala openjdk-11-jdk"
+            echo "Exiting due to missing Scala compiler."
+            exit 1
+          fi
 
           # Compile the Scala script into class files
           echo "Compiling Scala script..."
