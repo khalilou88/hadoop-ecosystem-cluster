@@ -74,6 +74,36 @@ jobs:
             done' || { echo "HistoryServer did not become healthy in time!"; exit 1; }
           echo "HistoryServer is healthy."
 
+      - name: Wait for Hive Metastore DB to be healthy
+        # Wait for the PostgreSQL database for Hive Metastore to be healthy.
+        run: |
+          echo "Waiting for Hive Metastore DB to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hive-metastore-db | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Hive Metastore DB did not become healthy in time!"; exit 1; }
+          echo "Hive Metastore DB is healthy."
+
+      - name: Wait for Hive Metastore to be healthy
+        # Wait for the Hive Metastore service to report as healthy.
+        run: |
+          echo "Waiting for Hive Metastore to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hive-metastore | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Hive Metastore did not become healthy in time!"; exit 1; }
+          echo "Hive Metastore is healthy."
+
+      - name: Wait for HiveServer2 to be healthy
+        # Wait for the HiveServer2 service to report as healthy.
+        run: |
+          echo "Waiting for HiveServer2 to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps hiveserver2 | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "HiveServer2 did not become healthy in time!"; exit 1; }
+          echo "HiveServer2 is healthy."
+
       - name: Verify HDFS connectivity
         # Execute a simple HDFS command inside the namenode container to verify HDFS is working.
         run: |
@@ -188,6 +218,459 @@ jobs:
           echo "Verifying YARN application history..."
           docker compose exec resourcemanager yarn application -list -appStates FINISHED
           echo "YARN application history verified."
+
+      - name: Test Hive Metastore connectivity
+        # Test connection to Hive Metastore service by checking if beeline can connect and show databases
+        run: |
+          echo "Testing Hive Metastore connectivity via beeline..."
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "SHOW DATABASES;" --silent=true --showHeader=false --outputformat=tsv2 | head -5
+          echo "Hive Metastore connectivity verified via HiveServer2."
+
+      - name: Create Hive test database
+        # Create a test database in Hive using beeline from HiveServer2 container
+        run: |
+          echo "Creating Hive test database..."
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "CREATE DATABASE IF NOT EXISTS testdb; SHOW DATABASES;" --silent=true
+          echo "Hive test database created."
+
+      - name: Create test data in HDFS for Hive
+        # Create sample CSV data for Hive table testing with comprehensive logging
+        run: |
+          echo "============================================"
+          echo "Creating test data for Hive tables..."
+          echo "Timestamp: $(date)"
+          echo "============================================"
+
+          # Function to log with timestamp
+          log() {
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+
+          # Function to check command success and continue on error for debugging
+          check_status() {
+              local exit_code=$?
+              if [ $exit_code -eq 0 ]; then
+                  log "✅ SUCCESS: $1"
+              else
+                  log "❌ ERROR: $1 (Exit code: $exit_code)"
+              fi
+              return $exit_code
+          }
+
+          # Step 1: Check container status
+          log "Checking container status..."
+          docker compose ps
+          echo ""
+
+          # Step 2: Check if hiveserver2 container is accessible
+          log "Testing hiveserver2 container connectivity..."
+          docker compose exec hiveserver2 echo "Container is accessible" 2>&1
+          check_status "HiveServer2 container accessibility"
+          echo ""
+
+          # Step 3: Check Java processes in containers
+          log "Checking Java processes in containers..."
+
+          log "HiveServer2 processes:"
+          docker compose exec hiveserver2 jps 2>&1 || log "Cannot get HiveServer2 processes"
+
+          log "Namenode processes:"
+          docker compose exec namenode jps 2>&1 || log "Cannot get Namenode processes"
+
+          log "Datanode processes:"
+          docker compose exec datanode jps 2>&1 || log "Cannot get Datanode processes"
+          echo ""
+
+          # Step 4: Check HDFS filesystem status
+          log "Checking HDFS filesystem status..."
+          docker compose exec namenode hdfs dfsadmin -report 2>&1
+          check_status "HDFS filesystem status"
+          echo ""
+
+          # Step 5: Check HDFS safe mode
+          log "Checking HDFS safe mode status..."
+          SAFE_MODE=$(docker compose exec namenode hdfs dfsadmin -safemode get 2>&1 || echo "ERROR_GETTING_SAFE_MODE")
+          log "Safe mode status: $SAFE_MODE"
+
+          if echo "$SAFE_MODE" | grep -q "ON"; then
+              log "⚠️  HDFS is in safe mode, attempting to leave..."
+              docker compose exec namenode hdfs dfsadmin -safemode leave 2>&1
+              check_status "Leaving safe mode"
+              sleep 10
+              
+              # Recheck safe mode
+              SAFE_MODE_AFTER=$(docker compose exec namenode hdfs dfsadmin -safemode get 2>&1 || echo "ERROR_GETTING_SAFE_MODE")
+              log "Safe mode status after leaving: $SAFE_MODE_AFTER"
+          fi
+          echo ""
+
+          # Step 6: Check existing HDFS directory structure
+          log "Checking existing HDFS directory structure..."
+
+          log "Root directory (/):"
+          docker compose exec namenode hdfs dfs -ls / 2>&1 || log "Cannot list root directory"
+
+          log "User directory (/user):"
+          docker compose exec namenode hdfs dfs -ls /user 2>&1 || log "/user directory doesn't exist or inaccessible"
+
+          log "Hive directory (/user/hive):"
+          docker compose exec namenode hdfs dfs -ls /user/hive 2>&1 || log "/user/hive directory doesn't exist or inaccessible"
+          echo ""
+
+          # Step 7: Create base directories using namenode (more reliable)
+          log "Creating base HDFS directories using namenode..."
+
+          log "Creating /user directory..."
+          docker compose exec namenode hdfs dfs -mkdir -p /user 2>&1
+          check_status "Creating /user directory"
+
+          log "Creating /user/hive directory..."
+          docker compose exec namenode hdfs dfs -mkdir -p /user/hive 2>&1
+          check_status "Creating /user/hive directory"
+
+          log "Creating /user/hive/warehouse directory..."
+          docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse 2>&1
+          check_status "Creating /user/hive/warehouse directory"
+
+          log "Setting permissions on warehouse directory..."
+          docker compose exec namenode hdfs dfs -chmod 777 /user/hive/warehouse 2>&1
+          check_status "Setting permissions on warehouse directory"
+          echo ""
+
+          # Step 8: Verify directory creation
+          log "Verifying directory creation..."
+          log "Listing /user/hive contents:"
+          docker compose exec namenode hdfs dfs -ls /user/hive 2>&1 || log "Cannot list /user/hive"
+          echo ""
+
+          # Step 9: Create CSV file
+          log "Creating CSV test file in hiveserver2 container..."
+          docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv" 2>&1
+          check_status "Creating CSV header"
+
+          docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv" 2>&1
+          check_status "Adding first employee record"
+
+          docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv" 2>&1
+          check_status "Adding second employee record"
+
+          docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv" 2>&1
+          check_status "Adding third employee record"
+
+          log "Verifying CSV file creation:"
+          docker compose exec hiveserver2 cat /tmp/employees.csv 2>&1
+          check_status "Verifying CSV file content"
+          echo ""
+
+          # Step 10: Test HDFS connectivity from hiveserver2
+          log "Testing HDFS connectivity from hiveserver2..."
+          log "Listing root directory from hiveserver2:"
+          docker compose exec hiveserver2 hdfs dfs -ls / 2>&1
+          check_status "HDFS connectivity from hiveserver2"
+          echo ""
+
+          # Step 11: Create target directory (try both namenode and hiveserver2)
+          log "Creating target directory for employees table..."
+
+          log "Attempting to create directory using namenode..."
+          docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees 2>&1
+          NAMENODE_RESULT=$?
+          check_status "Creating directory via namenode"
+
+          if [ $NAMENODE_RESULT -ne 0 ]; then
+              log "Namenode failed, trying with hiveserver2..."
+              docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees 2>&1
+              check_status "Creating directory via hiveserver2"
+          fi
+          echo ""
+
+          # Step 12: Verify directory exists
+          log "Verifying target directory exists..."
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/ 2>&1
+          check_status "Listing testdb.db contents"
+          echo ""
+
+          # Step 13: Upload file to HDFS (using namenode - most reliable approach)
+          log "Uploading CSV file to HDFS using namenode container..."
+
+          log "Copying CSV file from hiveserver2 to namenode container..."
+          docker compose exec hiveserver2 cat /tmp/employees.csv | docker compose exec -T namenode bash -c "cat > /tmp/employees.csv"
+          check_status "Copying file to namenode container"
+
+          log "Verifying file copied to namenode:"
+          docker compose exec namenode cat /tmp/employees.csv 2>&1
+          check_status "Verifying file in namenode container"
+
+          log "Uploading file to HDFS from namenode container..."
+          docker compose exec namenode hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/ 2>&1
+          check_status "Uploading CSV file to HDFS"
+          echo ""
+
+          # Step 14: Verify file upload
+          log "Verifying file upload..."
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ 2>&1
+          check_status "Listing uploaded files"
+
+          log "Checking file content in HDFS..."
+          docker compose exec namenode hdfs dfs -cat /user/hive/warehouse/testdb.db/employees/employees.csv 2>&1
+          check_status "Reading uploaded file content"
+          echo ""
+
+          # Step 15: Final status
+          log "============================================"
+          log "Test data creation process completed!"
+          log "Timestamp: $(date)"
+          log "============================================"
+
+      # - name: Create test data in HDFS for Hive
+      #   # Create sample CSV data for Hive table testing using HiveServer2 container
+      #   run: |
+      #     echo "Creating test data for Hive tables..."
+      #     docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
+      #     docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+      #     docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
+      #     echo "Test data created and uploaded to HDFS."
+
+      - name: Create Hive external table
+        # Create an external Hive table pointing to the test data using beeline from HiveServer2
+        run: |
+          echo "=== Starting Hive External Table Creation ==="
+
+          # Step 1: Verify HDFS directory structure
+          echo "1. Checking HDFS directory structure..."
+          echo "Listing /user/hive/warehouse/testdb.db/:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/ || echo "Directory not found or permission denied"
+
+          echo "Listing /user/hive/warehouse/testdb.db/employees/:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Employees directory not found"
+
+          echo "Checking permissions and ownership:"
+          docker compose exec namenode hdfs dfs -ls -la /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
+
+          # Step 2: Verify the target path exists and is a directory
+          echo ""
+          echo "2. Verifying target path properties..."
+          if docker compose exec namenode hdfs dfs -test -d /user/hive/warehouse/testdb.db/employees; then
+            echo "✓ /user/hive/warehouse/testdb.db/employees is a directory"
+          else
+            echo "✗ /user/hive/warehouse/testdb.db/employees is NOT a directory"
+            # Check if it's a file instead
+            if docker compose exec namenode hdfs dfs -test -f /user/hive/warehouse/testdb.db/employees; then
+              echo "✗ /user/hive/warehouse/testdb.db/employees exists as a FILE (this is the problem!)"
+              echo "Removing file and recreating as directory..."
+              docker compose exec namenode hdfs dfs -rm /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -chmod 755 /user/hive/warehouse/testdb.db/employees
+              echo "Directory recreated successfully"
+            else
+              echo "✗ /user/hive/warehouse/testdb.db/employees does not exist at all"
+              echo "Creating directory structure..."
+              docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -chmod 755 /user/hive/warehouse/testdb.db/employees
+              echo "Directory created successfully"
+            fi
+          fi
+
+          # Step 3: Check if CSV file is in the right location
+          echo ""
+          echo "3. Checking CSV file location..."
+          echo "Contents of employees directory:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Cannot list directory contents"
+
+          # Step 4: Verify HiveServer2 is running
+          echo ""
+          echo "4. Verifying HiveServer2 connectivity..."
+          if docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" -e "SHOW DATABASES;" --silent=true > /dev/null 2>&1; then
+            echo "✓ HiveServer2 is accessible"
+          else
+            echo "✗ Cannot connect to HiveServer2"
+            echo "HiveServer2 container status:"
+            docker compose ps hiveserver2
+            echo "HiveServer2 logs (last 20 lines):"
+            docker compose logs --tail=20 hiveserver2
+          fi
+
+          # Step 5: Check if database exists
+          echo ""
+          echo "5. Verifying database exists..."
+          echo "Available databases:"
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" -e "SHOW DATABASES;" --silent=false 2>&1 || echo "Failed to list databases"
+
+          # Step 6: Attempt to create the table with full logging
+          echo ""
+          echo "6. Creating Hive external table..."
+          echo "Executing CREATE TABLE statement..."
+
+          # Remove --silent=true to see full output
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; 
+                CREATE EXTERNAL TABLE IF NOT EXISTS employees (
+                  id INT,
+                  name STRING,
+                  age INT
+                ) 
+                ROW FORMAT DELIMITED 
+                FIELDS TERMINATED BY ',' 
+                STORED AS TEXTFILE 
+                LOCATION 'hdfs://namenode/user/hive/warehouse/testdb.db/employees'
+                TBLPROPERTIES ('skip.header.line.count'='1');" 2>&1
+
+          # Capture the exit code
+          CREATE_TABLE_EXIT_CODE=$?
+
+          # Step 7: Verify table creation
+          echo ""
+          echo "7. Verifying table creation..."
+          if [ $CREATE_TABLE_EXIT_CODE -eq 0 ]; then
+            echo "✓ CREATE TABLE command completed with exit code 0"
+            
+            # Check if table actually exists
+            echo "Checking if table exists:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; SHOW TABLES;" --silent=false 2>&1
+            
+            # Try to describe the table
+            echo "Table description:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; DESCRIBE employees;" --silent=false 2>&1
+              
+          else
+            echo "✗ CREATE TABLE command failed with exit code: $CREATE_TABLE_EXIT_CODE"
+            
+            # Additional debugging
+            echo ""
+            echo "8. Additional debugging information..."
+            echo "Metastore logs (last 30 lines):"
+            docker compose logs --tail=30 metastore || echo "Cannot fetch metastore logs"
+            
+            echo "HiveServer2 logs (last 30 lines):"
+            docker compose logs --tail=30 hiveserver2 || echo "Cannot fetch hiveserver2 logs"
+            
+            echo "All container statuses:"
+            docker compose ps
+            
+            # Try alternative approach
+            echo ""
+            echo "9. Trying alternative table creation approach..."
+            echo "Attempting to create managed table instead:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; 
+                  CREATE TABLE IF NOT EXISTS employees_managed (
+                    id INT,
+                    name STRING,
+                    age INT
+                  ) 
+                  ROW FORMAT DELIMITED 
+                  FIELDS TERMINATED BY ',' 
+                  STORED AS TEXTFILE 
+                  TBLPROPERTIES ('skip.header.line.count'='1');" 2>&1
+            
+            if [ $? -eq 0 ]; then
+              echo "✓ Managed table creation succeeded - issue is with external table location"
+            else
+              echo "✗ Even managed table creation failed - deeper Hive configuration issue"
+            fi
+            
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Hive External Table Creation Complete ==="
+
+      # - name: Create Hive external table
+      #   # Create an external Hive table pointing to the test data using beeline from HiveServer2
+      #   run: |
+      #     echo "Creating Hive external table..."
+      #     docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+      #       -e "USE testdb;
+      #           CREATE EXTERNAL TABLE IF NOT EXISTS employees (
+      #             id INT,
+      #             name STRING,
+      #             age INT
+      #           )
+      #           ROW FORMAT DELIMITED
+      #           FIELDS TERMINATED BY ','
+      #           STORED AS TEXTFILE
+      #           LOCATION '/user/hive/warehouse/testdb.db/employees'
+      #           TBLPROPERTIES ('skip.header.line.count'='1');" --silent=true
+      #     echo "Hive external table created."
+
+      - name: Test Hive queries
+        # Execute various Hive queries to test functionality using beeline from HiveServer2
+        run: |
+          echo "Testing Hive queries..."
+          echo "=== Showing tables ==="
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; SHOW TABLES;" --silent=true
+
+          echo "=== Selecting all records ==="
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; SELECT * FROM employees;" --silent=true
+
+          echo "=== Counting records ==="
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; SELECT COUNT(*) as total_employees FROM employees;" --silent=true
+
+          echo "=== Average age ==="
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; SELECT AVG(age) as avg_age FROM employees;" --silent=true
+          echo "Hive queries executed successfully."
+
+      - name: Test Hive with MapReduce integration
+        # Test that Hive can execute MapReduce jobs using beeline from HiveServer2
+        run: |
+          echo "Testing Hive with MapReduce integration..."
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; 
+                SET hive.exec.mode.local.auto=false;
+                SET mapreduce.job.reduces=1;
+                CREATE TABLE IF NOT EXISTS employee_summary AS 
+                SELECT 
+                  CASE 
+                    WHEN age < 30 THEN 'Young' 
+                    ELSE 'Senior' 
+                  END as age_group,
+                  COUNT(*) as count,
+                  AVG(age) as avg_age
+                FROM employees 
+                GROUP BY 
+                  CASE 
+                    WHEN age < 30 THEN 'Young' 
+                    ELSE 'Senior' 
+                  END;" --silent=true
+
+          echo "=== Viewing MapReduce results ==="
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+            -e "USE testdb; SELECT * FROM employee_summary;" --silent=true
+          echo "Hive MapReduce integration test completed."
+
+      - name: Check HiveServer2 UI accessibility
+        # Check if the HiveServer2 Web UI is accessible
+        run: |
+          echo "Checking HiveServer2 UI at http://localhost:10002..."
+          until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:10002)" == "200" ]; do
+            echo -n "."; sleep 5;
+          done
+          echo "HiveServer2 UI is accessible."
+
+      - name: Test Hive CLI functionality
+        # Test the traditional Hive CLI (if available) using HiveServer2 container
+        run: |
+          echo "Testing Hive CLI functionality..."
+          docker compose exec hiveserver2 bash -c "echo 'SHOW DATABASES;' | hive --silent" || echo "Hive CLI not available, using Beeline only"
+          echo "Hive CLI test completed."
+
+      - name: Verify Hive Metastore schema
+        # Verify that the Hive Metastore schema is properly initialized
+        run: |
+          echo "Verifying Hive Metastore schema..."
+          docker compose exec hive-metastore-db psql -U hive -d metastore -c "\dt" | head -10
+          echo "Hive Metastore schema verification completed."
 
       - name: Stop Hadoop Cluster
         # Stop and remove all services, networks, and volumes created by Docker Compose.
