@@ -714,7 +714,7 @@ jobs:
           docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Employees directory not found"
 
           echo "Checking permissions and ownership:"
-          docker compose exec namenode hdfs dfs -ls -la /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
+          docker compose exec namenode hdfs dfs -ls -l /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
 
           # Step 2: Verify the target path exists and is a directory
           echo ""
