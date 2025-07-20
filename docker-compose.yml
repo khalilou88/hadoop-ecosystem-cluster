@@ -13,6 +13,10 @@ services:
       - ./config
     environment:
       ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
+    volumes:
+      - namenode-data:/tmp/hadoop-root/dfs/name
+    networks:
+      - hadoop-network
     healthcheck:
       test: ["CMD", "hdfs", "dfsadmin", "-report"]
       interval: 30s
@@ -25,6 +29,10 @@ services:
     command: ["hdfs", "datanode"]
     env_file:
       - ./config
+    volumes:
+      - datanode-data:/tmp/hadoop-root/dfs/data
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -48,8 +56,12 @@ services:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
+    #     condition: service_healthy
+    #   datanode:
     #     condition: service_healthy
     healthcheck:
       test: ["CMD", "jps | grep ResourceManager"]
@@ -63,6 +75,8 @@ services:
     command: ["yarn", "nodemanager"]
     env_file:
       - ./config
+    networks:
+      - hadoop-network
     # depends_on:
     #   resourcemanager:
     #     condition: service_healthy
@@ -82,6 +96,8 @@ services:
       - ./config
     volumes:
       - ./test.sh:/opt/test.sh
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -103,6 +119,8 @@ services:
     volumes:
       - ./test.sh:/opt/test.sh
       - ./mapreduce-jobs:/opt/mapreduce-jobs # Mount directory for job files
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -121,6 +139,8 @@ services:
       POSTGRES_PASSWORD: hive123
     volumes:
       - hive-metastore-db-data:/var/lib/postgresql/data
+    networks:
+      - hadoop-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
       interval: 30s
@@ -145,9 +165,13 @@ services:
       - ./config
     ports:
       - 9083:9083
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
     #     condition: service_healthy
+    #   datanode:
+    #      condition: service_healthy
     #   hive-metastore-db:
     #     condition: service_healthy
     healthcheck:
@@ -176,8 +200,12 @@ services:
       - 10002:10002 # HiveServer2 Web UI
     volumes:
       - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql.jar
+    networks:
+      - hadoop-network
     # depends_on:
     #   namenode:
+    #     condition: service_healthy
+    #   datanode:
     #     condition: service_healthy
     #   hive-metastore:
     #     condition: service_healthy
@@ -188,4 +216,6 @@ services:
       retries: 5
 
 volumes:
+  namenode-data:
+  datanode-data:
   hive-metastore-db-data:
