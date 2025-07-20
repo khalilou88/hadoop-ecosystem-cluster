@@ -220,6 +220,7 @@ services:
       SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:///tmp/spark-logs"
     volumes:
       - ./spark-apps:/opt/spark-apps
+      - ./spark-logs:/tmp/spark-logs  # Mount local directory
     networks:
       - hadoop-network
     # depends_on:
