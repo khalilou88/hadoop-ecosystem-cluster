@@ -169,6 +169,7 @@ services:
       - ./test.sh:/opt/test.sh
       - ./hive-site.xml:/opt/hive/conf/hive-site.xml
       - ./hive-queries:/opt/hive-queries # Mount directory for query files
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql-42.7.7.jar # Add this line
     # depends_on:
     #   namenode:
     #     condition: service_healthy
