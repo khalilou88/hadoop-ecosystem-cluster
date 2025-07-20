@@ -110,3 +110,98 @@ services:
     #     condition: service_healthy
     #   historyserver:
     #     condition: service_healthy
+
+  # Hive Metastore Database (PostgreSQL)
+  hive-metastore-db:
+    image: postgres:13
+    hostname: hive-metastore-db
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive123
+    volumes:
+      - hive-metastore-db-data:/var/lib/postgresql/data
+    networks:
+      - hadoop-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Hive Metastore Service
+  hive-metastore:
+    image: apache/hive:4.0.0
+    hostname: hive-metastore
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver 
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore 
+        -Djavax.jdo.option.ConnectionUserName=hive 
+        -Djavax.jdo.option.ConnectionPassword=hive123
+    volumes:
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql.jar
+    env_file:
+      - ./config
+    ports:
+      - 9083:9083
+    networks:
+      - hadoop-network
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
+    #   datanode:
+    #      condition: service_healthy
+    #   hive-metastore-db:
+    #     condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9083"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # HiveServer2
+  hiveserver2:
+    image: apache/hive:4.0.0
+    hostname: hiveserver2
+    environment:
+      SERVICE_NAME: hiveserver2
+      IS_RESUME: "true"
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver 
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore 
+        -Djavax.jdo.option.ConnectionUserName=hive 
+        -Djavax.jdo.option.ConnectionPassword=hive123
+        -Dhive.metastore.uris=thrift://hive-metastore:9083    
+    env_file:
+      - ./config
+    ports:
+      - 10000:10000 # HiveServer2 Thrift port
+      - 10002:10002 # HiveServer2 Web UI
+    volumes:
+      - ./postgresql-42.7.7.jar:/opt/hive/lib/postgresql.jar
+    networks:
+      - hadoop-network
+    # depends_on:
+    #   namenode:
+    #     condition: service_healthy
+    #   datanode:
+    #     condition: service_healthy
+    #   hive-metastore:
+    #     condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  hadoop-network:
+    driver: bridge
+
+volumes:
+  # namenode-data:
+  # datanode-data:
+  hive-metastore-db-data:
