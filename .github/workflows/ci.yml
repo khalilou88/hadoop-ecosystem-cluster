@@ -439,7 +439,74 @@ jobs:
       - name: Create Hive external table
         # Create an external Hive table pointing to the test data using beeline from HiveServer2
         run: |
-          echo "Creating Hive external table..."
+          echo "=== Starting Hive External Table Creation ==="
+
+          # Step 1: Verify HDFS directory structure
+          echo "1. Checking HDFS directory structure..."
+          echo "Listing /user/hive/warehouse/testdb.db/:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/ || echo "Directory not found or permission denied"
+
+          echo "Listing /user/hive/warehouse/testdb.db/employees/:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Employees directory not found"
+
+          echo "Checking permissions and ownership:"
+          docker compose exec namenode hdfs dfs -ls -la /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
+
+          # Step 2: Verify the target path exists and is a directory
+          echo ""
+          echo "2. Verifying target path properties..."
+          if docker compose exec namenode hdfs dfs -test -d /user/hive/warehouse/testdb.db/employees; then
+            echo "✓ /user/hive/warehouse/testdb.db/employees is a directory"
+          else
+            echo "✗ /user/hive/warehouse/testdb.db/employees is NOT a directory"
+            # Check if it's a file instead
+            if docker compose exec namenode hdfs dfs -test -f /user/hive/warehouse/testdb.db/employees; then
+              echo "✗ /user/hive/warehouse/testdb.db/employees exists as a FILE (this is the problem!)"
+              echo "Removing file and recreating as directory..."
+              docker compose exec namenode hdfs dfs -rm /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -chmod 755 /user/hive/warehouse/testdb.db/employees
+              echo "Directory recreated successfully"
+            else
+              echo "✗ /user/hive/warehouse/testdb.db/employees does not exist at all"
+              echo "Creating directory structure..."
+              docker compose exec namenode hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+              docker compose exec namenode hdfs dfs -chmod 755 /user/hive/warehouse/testdb.db/employees
+              echo "Directory created successfully"
+            fi
+          fi
+
+          # Step 3: Check if CSV file is in the right location
+          echo ""
+          echo "3. Checking CSV file location..."
+          echo "Contents of employees directory:"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Cannot list directory contents"
+
+          # Step 4: Verify HiveServer2 is running
+          echo ""
+          echo "4. Verifying HiveServer2 connectivity..."
+          if docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" -e "SHOW DATABASES;" --silent=true > /dev/null 2>&1; then
+            echo "✓ HiveServer2 is accessible"
+          else
+            echo "✗ Cannot connect to HiveServer2"
+            echo "HiveServer2 container status:"
+            docker compose ps hiveserver2
+            echo "HiveServer2 logs (last 20 lines):"
+            docker compose logs --tail=20 hiveserver2
+          fi
+
+          # Step 5: Check if database exists
+          echo ""
+          echo "5. Verifying database exists..."
+          echo "Available databases:"
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" -e "SHOW DATABASES;" --silent=false 2>&1 || echo "Failed to list databases"
+
+          # Step 6: Attempt to create the table with full logging
+          echo ""
+          echo "6. Creating Hive external table..."
+          echo "Executing CREATE TABLE statement..."
+
+          # Remove --silent=true to see full output
           docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; 
                 CREATE EXTERNAL TABLE IF NOT EXISTS employees (
@@ -451,8 +518,87 @@ jobs:
                 FIELDS TERMINATED BY ',' 
                 STORED AS TEXTFILE 
                 LOCATION '/user/hive/warehouse/testdb.db/employees'
-                TBLPROPERTIES ('skip.header.line.count'='1');" --silent=true
-          echo "Hive external table created."
+                TBLPROPERTIES ('skip.header.line.count'='1');" 2>&1
+
+          # Capture the exit code
+          CREATE_TABLE_EXIT_CODE=$?
+
+          # Step 7: Verify table creation
+          echo ""
+          echo "7. Verifying table creation..."
+          if [ $CREATE_TABLE_EXIT_CODE -eq 0 ]; then
+            echo "✓ CREATE TABLE command completed with exit code 0"
+            
+            # Check if table actually exists
+            echo "Checking if table exists:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; SHOW TABLES;" --silent=false 2>&1
+            
+            # Try to describe the table
+            echo "Table description:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; DESCRIBE employees;" --silent=false 2>&1
+              
+          else
+            echo "✗ CREATE TABLE command failed with exit code: $CREATE_TABLE_EXIT_CODE"
+            
+            # Additional debugging
+            echo ""
+            echo "8. Additional debugging information..."
+            echo "Metastore logs (last 30 lines):"
+            docker compose logs --tail=30 metastore || echo "Cannot fetch metastore logs"
+            
+            echo "HiveServer2 logs (last 30 lines):"
+            docker compose logs --tail=30 hiveserver2 || echo "Cannot fetch hiveserver2 logs"
+            
+            echo "All container statuses:"
+            docker compose ps
+            
+            # Try alternative approach
+            echo ""
+            echo "9. Trying alternative table creation approach..."
+            echo "Attempting to create managed table instead:"
+            docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+              -e "USE testdb; 
+                  CREATE TABLE IF NOT EXISTS employees_managed (
+                    id INT,
+                    name STRING,
+                    age INT
+                  ) 
+                  ROW FORMAT DELIMITED 
+                  FIELDS TERMINATED BY ',' 
+                  STORED AS TEXTFILE 
+                  TBLPROPERTIES ('skip.header.line.count'='1');" 2>&1
+            
+            if [ $? -eq 0 ]; then
+              echo "✓ Managed table creation succeeded - issue is with external table location"
+            else
+              echo "✗ Even managed table creation failed - deeper Hive configuration issue"
+            fi
+            
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Hive External Table Creation Complete ==="
+
+      # - name: Create Hive external table
+      #   # Create an external Hive table pointing to the test data using beeline from HiveServer2
+      #   run: |
+      #     echo "Creating Hive external table..."
+      #     docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
+      #       -e "USE testdb;
+      #           CREATE EXTERNAL TABLE IF NOT EXISTS employees (
+      #             id INT,
+      #             name STRING,
+      #             age INT
+      #           )
+      #           ROW FORMAT DELIMITED
+      #           FIELDS TERMINATED BY ','
+      #           STORED AS TEXTFILE
+      #           LOCATION '/user/hive/warehouse/testdb.db/employees'
+      #           TBLPROPERTIES ('skip.header.line.count'='1');" --silent=true
+      #     echo "Hive external table created."
 
       - name: Test Hive queries
         # Execute various Hive queries to test functionality using beeline from HiveServer2

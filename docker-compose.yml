@@ -149,7 +149,7 @@ services:
 
   # Hive Metastore Service
   hive-metastore:
-    image: apache/hive:4.0.0
+    image: apache/hive:4.0.1
     hostname: hive-metastore
     environment:
       SERVICE_NAME: metastore
@@ -182,7 +182,7 @@ services:
 
   # HiveServer2
   hiveserver2:
-    image: apache/hive:4.0.0
+    image: apache/hive:4.0.1
     hostname: hiveserver2
     environment:
       SERVICE_NAME: hiveserver2
@@ -220,6 +220,6 @@ networks:
     driver: bridge
 
 # volumes:
-  # namenode-data:
-  # datanode-data:
-  # hive-metastore-db-data:
+# namenode-data:
+# datanode-data:
+# hive-metastore-db-data:
