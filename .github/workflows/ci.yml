@@ -138,7 +138,7 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
-      - name: Test Spark with HDFS integration
+      - name: Diagnosing Spark Cluster Issues
         # Test Spark's ability to read from and write to HDFS
         run: |
           echo "=== Diagnosing Spark Cluster Issues ==="
@@ -189,6 +189,39 @@ jobs:
           echo "Run the local mode test with: bash /tmp/test_spark_local.sh"
 
           echo "=== Troubleshooting Complete ==="
+
+      - name: Testing Spark with HDFS Integration
+        run: |
+          echo "=== Testing Spark with HDFS Integration ==="
+
+          echo "1. Creating test data in HDFS for Spark..."
+          docker compose exec namenode bash -c "echo -e '1,Alice,25\n2,Bob,30\n3,Charlie,35' > /tmp/spark_test.csv"
+          docker compose exec namenode hdfs dfs -mkdir -p /spark-test/input
+          docker compose exec namenode hdfs dfs -put /tmp/spark_test.csv /spark-test/input/
+
+          echo "2. Verifying test data in HDFS..."
+          docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
+
+          echo "3. Creating Spark job script..."
+          docker compose exec spark-client bash -c 'cat > /tmp/spark_job.scala << EOF
+          val df = spark.read.option("header", "false").csv("hdfs://namenode/spark-test/input/spark_test.csv")
+          df.show()
+          df.write.mode("overwrite").csv("hdfs://namenode/spark-test/output")
+          println("Spark HDFS integration test completed")
+          System.exit(0)
+          EOF'
+
+          echo "4. Running Spark job to process HDFS data..."
+          docker compose exec spark-client spark-shell --master spark://spark-master:7077 \
+            --driver-memory 512m --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            -i /tmp/spark_job.scala
+
+          echo "5. Verifying Spark output in HDFS..."
+          docker compose exec namenode hdfs dfs -ls /spark-test/output/
+          docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
+
+          echo "Spark HDFS integration test completed."
 
       - name: Test Spark SQL functionality
         # Test Spark SQL capabilities
