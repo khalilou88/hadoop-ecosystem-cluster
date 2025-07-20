@@ -173,7 +173,7 @@ jobs:
           docker compose exec namenode hdfs dfs -chmod -R 755 /spark-test/input
 
           echo "4.4. Verify permissions are fixed..."
-          docker compose exec namenode hdfs dfs -ls -l /spark-test/
+          docker compose exec namenode hdfs dfs -ls /spark-test/
 
           echo "4.5. Alternative: Create a new directory with correct permissions..."
           docker compose exec namenode hdfs dfs -mkdir -p /spark-output
@@ -688,18 +688,6 @@ jobs:
           log "Timestamp: $(date)"
           log "============================================"
 
-      # - name: Create test data in HDFS for Hive
-      #   # Create sample CSV data for Hive table testing using HiveServer2 container
-      #   run: |
-      #     echo "Creating test data for Hive tables..."
-      #     docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv"
-      #     docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv"
-      #     docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
-      #     docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
-      #     docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
-      #     docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
-      #     echo "Test data created and uploaded to HDFS."
-
       - name: Create Hive external table
         # Create an external Hive table pointing to the test data using beeline from HiveServer2
         run: |
@@ -714,7 +702,7 @@ jobs:
           docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/employees/ || echo "Employees directory not found"
 
           echo "Checking permissions and ownership:"
-          docker compose exec namenode hdfs dfs -ls -l /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
+          docker compose exec namenode hdfs dfs -ls /user/hive/warehouse/testdb.db/ || echo "Cannot check permissions"
 
           # Step 2: Verify the target path exists and is a directory
           echo ""
@@ -845,24 +833,6 @@ jobs:
 
           echo ""
           echo "=== Hive External Table Creation Complete ==="
-
-      # - name: Create Hive external table
-      #   # Create an external Hive table pointing to the test data using beeline from HiveServer2
-      #   run: |
-      #     echo "Creating Hive external table..."
-      #     docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
-      #       -e "USE testdb;
-      #           CREATE EXTERNAL TABLE IF NOT EXISTS employees (
-      #             id INT,
-      #             name STRING,
-      #             age INT
-      #           )
-      #           ROW FORMAT DELIMITED
-      #           FIELDS TERMINATED BY ','
-      #           STORED AS TEXTFILE
-      #           LOCATION '/user/hive/warehouse/testdb.db/employees'
-      #           TBLPROPERTIES ('skip.header.line.count'='1');" --silent=true
-      #     echo "Hive external table created."
 
       - name: Test Hive queries
         # Execute various Hive queries to test functionality using beeline from HiveServer2
