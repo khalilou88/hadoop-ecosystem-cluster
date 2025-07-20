@@ -138,58 +138,6 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
-      - name: Diagnosing Spark Cluster Issues
-        # Test Spark's ability to read from and write to HDFS
-        run: |
-          echo "=== Diagnosing Spark Cluster Issues ==="
-
-          echo "1. Check if Spark master is running..."
-          docker compose ps | grep spark
-
-          echo "2. Check Spark master logs..."
-          echo "--- Spark Master Logs ---"
-          docker compose logs spark-master | tail -20
-
-          echo "3. Check if any Spark workers are running..."
-          echo "--- Spark Worker Logs ---"
-          docker compose logs spark-worker | tail -20
-
-          echo "4. Check Spark master web UI status..."
-          echo "You can access the Spark Master UI at: http://localhost:8080"
-          echo "Check if workers are registered there."
-
-          echo "5. Restart Spark cluster components..."
-          docker compose restart spark-master spark-worker
-
-          echo "6. Wait for services to start..."
-          sleep 10
-
-          echo "7. Verify Spark master is accepting workers..."
-          docker compose logs spark-master | tail -10
-
-          echo "8. Check worker connection..."
-          docker compose logs spark-worker | tail -10
-
-          echo "=== Alternative: Run Spark in local mode ==="
-          echo "If workers still don't connect, try running Spark in local mode:"
-
-          cat > /tmp/test_spark_local.sh << 'EOF'
-          echo "Running Spark job in local mode..."
-          docker compose exec spark-client spark-shell --master local[2] \
-            --driver-memory 512m \
-            --conf spark.sql.execution.arrow.pyspark.enabled=false \
-            -i /tmp/spark_job.scala
-
-          echo "Verifying output..."
-          docker compose exec namenode hdfs dfs -ls /spark-test/output/ || echo "No output directory found"
-          docker compose exec namenode hdfs dfs -cat /spark-test/output/part-* 2>/dev/null || echo "No output files found"
-          EOF
-
-          chmod +x /tmp/test_spark_local.sh
-          echo "Run the local mode test with: bash /tmp/test_spark_local.sh"
-
-          echo "=== Troubleshooting Complete ==="
-
       - name: Testing Spark with HDFS Integration
         run: |
           echo "=== Testing Spark with HDFS Integration ==="
