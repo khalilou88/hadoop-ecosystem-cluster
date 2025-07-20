@@ -165,6 +165,60 @@ jobs:
 
           echo "Spark cluster connectivity verified."
 
+      - name:
+          Test Spark with HDFS integration
+          # Test Spark's ability to read from and write to HDFS
+        run: |
+          echo "=== Testing Spark with HDFS Integration ==="
+
+          echo "1. Creating test data in HDFS for Spark..."
+          docker compose exec namenode bash -c "echo -e '1,Alice,25\n2,Bob,30\n3,Charlie,35' > /tmp/spark_test.csv"
+          docker compose exec namenode hdfs dfs -mkdir -p /spark-test/input
+          docker compose exec namenode hdfs dfs -put /tmp/spark_test.csv /spark-test/input/
+
+          echo "2. Verifying test data in HDFS..."
+          docker compose exec namenode hdfs dfs -cat /spark-test/input/spark_test.csv
+
+          echo "3. Running Spark job to process HDFS data using spark-submit..."
+
+          # Create a temporary Scala script file on the spark-client container
+          docker compose exec spark-client bash -c 'cat <<EOF > /tmp/spark_job.scala
+          import org.apache.spark.sql.SparkSession
+
+          object SparkHDFSIntegration {
+            def main(args: Array[String]): Unit = {
+              val spark = SparkSession.builder
+                .appName("Spark HDFS Integration Test")
+                .getOrCreate()
+
+              println("Reading data from HDFS...")
+              val df = spark.read.option("header", "false").csv("hdfs://namenode/spark-test/input/spark_test.csv")
+              df.show()
+
+              println("Writing processed data to HDFS...")
+              df.write.mode("overwrite").csv("hdfs://namenode/spark-test/output")
+
+              println("Spark HDFS integration test completed successfully.")
+              spark.stop()
+            }
+          }
+          EOF'
+
+          # Submit the Scala script using spark-submit
+          docker compose exec spark-client spark-submit \
+            --class SparkHDFSIntegration \
+            --master spark://spark-master:7077 \
+            --driver-memory 512m \
+            --executor-memory 512m \
+            --conf spark.sql.execution.arrow.pyspark.enabled=false \
+            /tmp/spark_job.scala
+
+          echo "4. Verifying Spark output in HDFS..."
+          docker compose exec namenode hdfs dfs -ls /spark-test/output/
+          docker compose exec namenode hdfs dfs -cat /spark-test/output/part-*
+
+          echo "Spark HDFS integration test completed."
+
       - name: Test Spark with HDFS integration
         # Test Spark's ability to read from and write to HDFS
         run: |
