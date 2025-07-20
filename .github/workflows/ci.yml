@@ -173,7 +173,7 @@ jobs:
           docker compose exec namenode hdfs dfs -chmod -R 755 /spark-test/input
 
           echo "4.4. Verify permissions are fixed..."
-          docker compose exec namenode hdfs dfs -ls -la /spark-test/
+          docker compose exec namenode hdfs dfs -ls -l /spark-test/
 
           echo "4.5. Alternative: Create a new directory with correct permissions..."
           docker compose exec namenode hdfs dfs -mkdir -p /spark-output
