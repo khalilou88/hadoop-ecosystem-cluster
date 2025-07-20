@@ -205,8 +205,11 @@ services:
   spark-history-server:
     image: apache/spark:3.5.3
     hostname: spark-history-server
-    command:
-      ["./bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
+    entrypoint:
+      [
+        "/opt/spark/bin/spark-class",
+        "org.apache.spark.deploy.history.HistoryServer",
+      ]
     ports:
       - 18080:18080 # Spark History Server Web UI
     env_file:
@@ -336,7 +339,6 @@ services:
 networks:
   hadoop-network:
     driver: bridge
-
 # volumes:
 # namenode-data:
 # datanode-data:
