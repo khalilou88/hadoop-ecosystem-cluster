@@ -7,6 +7,7 @@ CORE-SITE.XML_fs.defaultFS=hdfs://namenode
 # HDFS Configuration
 HDFS-SITE.XML_dfs.namenode.rpc-address=namenode:8020
 HDFS-SITE.XML_dfs.replication=1
+HDFS_SITE_XML_dfs_namenode_name_dir=file:///tmp/hadoop-root/dfs/name
 
 # MapReduce Configuration
 MAPRED-SITE.XML_mapreduce.framework.name=yarn
