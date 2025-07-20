@@ -220,37 +220,37 @@ jobs:
           echo "YARN application history verified."
 
       - name: Test Hive Metastore connectivity
-        # Test connection to Hive Metastore service
+        # Test connection to Hive Metastore service using HiveServer2 container
         run: |
           echo "Testing Hive Metastore connectivity..."
-          docker compose exec hive-client hive --service schematool -dbType postgres -info
+          docker compose exec hiveserver2 hive --service schematool -dbType postgres -info
           echo "Hive Metastore connectivity verified."
 
       - name: Create Hive test database
-        # Create a test database in Hive
+        # Create a test database in Hive using beeline from HiveServer2 container
         run: |
           echo "Creating Hive test database..."
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "CREATE DATABASE IF NOT EXISTS testdb; SHOW DATABASES;" --silent=true
           echo "Hive test database created."
 
       - name: Create test data in HDFS for Hive
-        # Create sample CSV data for Hive table testing
+        # Create sample CSV data for Hive table testing using HiveServer2 container
         run: |
           echo "Creating test data for Hive tables..."
-          docker compose exec hive-client bash -c "echo 'id,name,age' > /tmp/employees.csv"
-          docker compose exec hive-client bash -c "echo '1,John,25' >> /tmp/employees.csv"
-          docker compose exec hive-client bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
-          docker compose exec hive-client bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
-          docker compose exec hive-client hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
-          docker compose exec hive-client hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
+          docker compose exec hiveserver2 bash -c "echo 'id,name,age' > /tmp/employees.csv"
+          docker compose exec hiveserver2 bash -c "echo '1,John,25' >> /tmp/employees.csv"
+          docker compose exec hiveserver2 bash -c "echo '2,Jane,30' >> /tmp/employees.csv"
+          docker compose exec hiveserver2 bash -c "echo '3,Bob,35' >> /tmp/employees.csv"
+          docker compose exec hiveserver2 hdfs dfs -mkdir -p /user/hive/warehouse/testdb.db/employees
+          docker compose exec hiveserver2 hdfs dfs -put /tmp/employees.csv /user/hive/warehouse/testdb.db/employees/
           echo "Test data created and uploaded to HDFS."
 
       - name: Create Hive external table
-        # Create an external Hive table pointing to the test data
+        # Create an external Hive table pointing to the test data using beeline from HiveServer2
         run: |
           echo "Creating Hive external table..."
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; 
                 CREATE EXTERNAL TABLE IF NOT EXISTS employees (
                   id INT,
@@ -265,31 +265,31 @@ jobs:
           echo "Hive external table created."
 
       - name: Test Hive queries
-        # Execute various Hive queries to test functionality
+        # Execute various Hive queries to test functionality using beeline from HiveServer2
         run: |
           echo "Testing Hive queries..."
           echo "=== Showing tables ==="
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; SHOW TABLES;" --silent=true
           
           echo "=== Selecting all records ==="
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; SELECT * FROM employees;" --silent=true
           
           echo "=== Counting records ==="
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; SELECT COUNT(*) as total_employees FROM employees;" --silent=true
           
           echo "=== Average age ==="
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; SELECT AVG(age) as avg_age FROM employees;" --silent=true
           echo "Hive queries executed successfully."
 
       - name: Test Hive with MapReduce integration
-        # Test that Hive can execute MapReduce jobs
+        # Test that Hive can execute MapReduce jobs using beeline from HiveServer2
         run: |
           echo "Testing Hive with MapReduce integration..."
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; 
                 SET hive.exec.mode.local.auto=false;
                 SET mapreduce.job.reduces=1;
@@ -309,7 +309,7 @@ jobs:
                   END;" --silent=true
           
           echo "=== Viewing MapReduce results ==="
-          docker compose exec hive-client beeline -u "jdbc:hive2://hiveserver2:10000" \
+          docker compose exec hiveserver2 beeline -u "jdbc:hive2://localhost:10000" \
             -e "USE testdb; SELECT * FROM employee_summary;" --silent=true
           echo "Hive MapReduce integration test completed."
 
@@ -323,10 +323,10 @@ jobs:
           echo "HiveServer2 UI is accessible."
 
       - name: Test Hive CLI functionality
-        # Test the traditional Hive CLI (if available)
+        # Test the traditional Hive CLI (if available) using HiveServer2 container
         run: |
           echo "Testing Hive CLI functionality..."
-          docker compose exec hive-client bash -c "echo 'SHOW DATABASES;' | hive --silent" || echo "Hive CLI not available, using Beeline only"
+          docker compose exec hiveserver2 bash -c "echo 'SHOW DATABASES;' | hive --silent" || echo "Hive CLI not available, using Beeline only"
           echo "Hive CLI test completed."
 
       - name: Verify Hive Metastore schema

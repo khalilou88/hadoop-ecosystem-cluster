@@ -167,6 +167,8 @@ services:
       - 10002:10002 # HiveServer2 Web UI
     volumes:
       - ./test.sh:/opt/test.sh
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./hive-queries:/opt/hive-queries # Mount directory for query files
     # depends_on:
     #   namenode:
     #     condition: service_healthy
@@ -177,27 +179,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-
-  # Hive Client for running queries
-  hive-client:
-    image: apache/hive:4.0.0
-    hostname: hive-client
-    command: ["tail", "-f", "/dev/null"] # Keep container running
-    environment:
-      SERVICE_OPTS: "-Dhive.metastore.uris=thrift://hive-metastore:9083"
-    env_file:
-      - ./config
-    volumes:
-      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
-      - ./test.sh:/opt/test.sh
-      - ./hive-queries:/opt/hive-queries # Mount directory for query files
-    # depends_on:
-    #   namenode:
-    #     condition: service_healthy
-    #   hive-metastore:
-    #     condition: service_healthy
-    #   hiveserver2:
-    #     condition: service_healthy
 
 volumes:
   hive-metastore-db-data:
