@@ -138,6 +138,34 @@ jobs:
           docker compose exec resourcemanager yarn application -list -appStates ALL
           echo "YARN ResourceManager status verified."
 
+      - name: Fixing HDFS Permissions for Spark User
+        run: |
+          echo "=== Fixing HDFS Permissions for Spark User ==="
+
+          echo "1. Check current permissions on /spark-test directory..."
+          docker compose exec namenode hdfs dfs -ls -d /spark-test
+
+          echo "2. Change ownership to allow spark user write access..."
+          docker compose exec namenode hdfs dfs -chown spark:spark /spark-test
+          docker compose exec namenode hdfs dfs -chmod 755 /spark-test
+
+          echo "3. Also fix permissions on the input directory..."
+          docker compose exec namenode hdfs dfs -chown -R spark:spark /spark-test/input
+          docker compose exec namenode hdfs dfs -chmod -R 755 /spark-test/input
+
+          echo "4. Verify permissions are fixed..."
+          docker compose exec namenode hdfs dfs -ls -la /spark-test/
+
+          echo "5. Alternative: Create a new directory with correct permissions..."
+          docker compose exec namenode hdfs dfs -mkdir -p /spark-output
+          docker compose exec namenode hdfs dfs -chown spark:spark /spark-output
+          docker compose exec namenode hdfs dfs -chmod 755 /spark-output
+
+          echo "6. Test creating a file as spark user..."
+          docker compose exec spark-client hdfs dfs -touchz /spark-test/test-write-permission.txt
+
+          echo "Permissions fixed! Now retry your Spark job."
+
       - name: Testing Spark with HDFS Integration
         run: |
           echo "=== Testing Spark with HDFS Integration ==="
