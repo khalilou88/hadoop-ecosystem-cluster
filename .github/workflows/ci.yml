@@ -61,7 +61,7 @@ jobs:
         run: |
           echo "Initializing Airflow database and creating admin user..."
           # The --profile init ensures only the init service runs for this step
-          docker-compose --profile init up airflow-init --exit-code-from airflow-init
+          docker compose --profile init up airflow-init --exit-code-from airflow-init
           echo "Airflow database initialized and admin user created."
         env:
           # Use a consistent UID for Airflow containers to avoid permission issues with mounted volumes
