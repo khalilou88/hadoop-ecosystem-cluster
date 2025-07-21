@@ -1,0 +1,21 @@
+FROM apache/airflow:2.9.2-python3.11
+
+USER root
+RUN apt-get update -qq && apt-get install -y --no-install-recommends libpq-dev default-libmysqlclient-dev gnupg
+RUN apt-get update && apt-get install -y curl
+USER airflow
+
+# Install necessary Python packages for database and Celery executor
+RUN pip install --no-cache-dir \
+    apache-airflow[postgres,celery] \
+    apache-airflow-providers-cncf-kubernetes \
+    apache-airflow-providers-apache-spark \
+    apache-airflow-providers-apache-hdfs \
+    apache-airflow-providers-apache-hive
+
+# Copy the custom config file if you have one
+# COPY airflow.cfg /opt/airflow/airflow.cfg
+
+# You might need to install specific JDBC drivers if your tasks interact with databases
+# RUN mkdir -p /opt/airflow/drivers
+# COPY postgresql-42.7.7.jar /opt/airflow/drivers/postgresql.jar
