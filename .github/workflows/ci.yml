@@ -36,6 +36,16 @@ jobs:
         id: generate_fernet_key
         run: echo "AIRFLOW_FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")" >> $GITHUB_ENV
 
+      - name: Get current user ID and set AIRFLOW_UID
+        id: set_airflow_uid
+        run: |
+          echo "AIRFLOW_UID=$(id -u)" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Verify AIRFLOW_UID (optional)
+        run: |
+          echo "AIRFLOW_UID is set to: $AIRFLOW_UID"
+
       - name: Initialize Airflow Database and User
         run: |
           echo "Initializing Airflow database and creating admin user..."
