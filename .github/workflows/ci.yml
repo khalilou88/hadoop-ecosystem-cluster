@@ -28,6 +28,47 @@ jobs:
       #   # It uses --rm to remove the container immediately after formatting.
       #   run: docker compose run --rm namenode hdfs namenode -format
 
+      # --- Airflow Specific Setup and Checks ---
+      - name: Install cryptography package
+        run: pip install cryptography
+
+      - name: Generate Airflow Fernet Key
+        id: generate_fernet_key
+        run: |
+          FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          echo "AIRFLOW_FERNET_KEY=$FERNET_KEY" >> $GITHUB_ENV
+          echo "::add-mask::$FERNET_KEY"
+
+      - name: Generate Airflow Secret Key
+        id: generate_secret_key
+        run: |
+          SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+          echo "AIRFLOW_SECRET_KEY=$SECRET_KEY" >> $GITHUB_ENV
+          echo "::add-mask::$SECRET_KEY"
+
+      - name: Set AIRFLOW_UID for Docker
+        id: set_airflow_uid
+        run: |
+          # In GitHub Actions, we typically use a fixed UID that works well with Docker
+          echo "AIRFLOW_UID=50000" >> $GITHUB_ENV
+
+      - name: Create required directories
+        run: |
+          mkdir -p dags logs plugins
+          sudo chmod -R 777 dags logs plugins
+
+      - name: Initialize Airflow Database and User
+        run: |
+          echo "Initializing Airflow database and creating admin user..."
+          # The --profile init ensures only the init service runs for this step
+          docker compose --profile init up airflow-init --exit-code-from airflow-init
+          echo "Airflow database initialized and admin user created."
+        env:
+          # Use a consistent UID for Airflow containers to avoid permission issues with mounted volumes
+          AIRFLOW_UID: ${{ env.AIRFLOW_UID }}
+          # This should be set by the previous step via GITHUB_ENV
+          AIRFLOW_FERNET_KEY: ${{ env.AIRFLOW_FERNET_KEY }}
+
       - name: Start Hadoop Cluster
         # Start all services in detached mode
         run: docker compose up -d
@@ -123,6 +164,75 @@ jobs:
               echo -n "."; sleep 5; \
             done' || { echo "HiveServer2 did not become healthy in time!"; exit 1; }
           echo "HiveServer2 is healthy."
+
+      ## Airflow Health Checks 🩺
+
+      - name: Wait for Airflow DB to be healthy
+        run: |
+          echo "Waiting for Airflow DB to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps airflow-db | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow DB did not become healthy in time!"; exit 1; }
+          echo "Airflow DB is healthy."
+
+      - name: Wait for Airflow Redis to be healthy
+        run: |
+          echo "Waiting for Airflow Redis to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps airflow-redis | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow Redis did not become healthy in time!"; exit 1; }
+          echo "Airflow Redis is healthy."
+
+      - name: Wait for Airflow Webserver to be healthy
+        run: |
+          echo "Waiting for Airflow Webserver to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps airflow-webserver | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow Webserver did not become healthy in time!"; exit 1; }
+          echo "Airflow Webserver is healthy."
+
+      - name: Wait for Airflow Scheduler to be healthy
+        run: |
+          echo "Waiting for Airflow Scheduler to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps airflow-scheduler | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow Scheduler did not become healthy in time!"; exit 1; }
+          echo "Airflow Scheduler is healthy."
+
+      - name: Wait for Airflow Worker to be healthy
+        run: |
+          echo "Waiting for Airflow Worker to be healthy..."
+          timeout 300s bash -c \
+            'until docker compose ps airflow-worker | grep -q "healthy"; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow Worker did not become healthy in time!"; exit 1; }
+          echo "Airflow Worker is healthy."
+
+      - name: Check Airflow UI accessibility
+        run: |
+          echo "Checking Airflow UI at http://localhost:8090..."
+          timeout 300s bash -c \
+            'until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090)" == "200" ]; do \
+              echo -n "."; sleep 5; \
+            done' || { echo "Airflow UI did not become accessible in time!"; exit 1; }
+          echo "Airflow UI is accessible."
+
+      - name: Verify Airflow CLI
+        run: |
+          echo "Verifying Airflow CLI connectivity and DAG listing..."
+          # Execute a command inside the webserver container to confirm functionality
+          docker compose exec airflow-webserver airflow dags list
+          echo "Airflow CLI verification successful."
+        env:
+          # Pass required Airflow environment variables for CLI execution
+          AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+          AIRFLOW__CORE__FERNET_KEY: ${{ env.AIRFLOW_FERNET_KEY }}
+          AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+          AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
 
       - name: Verify HDFS connectivity
         # Execute a simple HDFS command inside the namenode container to verify HDFS is working.

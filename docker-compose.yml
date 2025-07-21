@@ -351,10 +351,174 @@ services:
       timeout: 10s
       retries: 5
 
+  # ------------------------------------------------------------------------------------------------------------------
+  # Airflow Services
+  # ------------------------------------------------------------------------------------------------------------------
+  airflow-db:
+    image: postgres:13
+    hostname: airflow-db
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    networks:
+      - hadoop-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-redis:
+    image: redis:7
+    hostname: airflow-redis
+    networks:
+      - hadoop-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    image: apache/airflow:2.9.2-python3.11
+    hostname: airflow-init
+    user: "${AIRFLOW_UID:-50000}"
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-apache-spark apache-airflow-providers-apache-hdfs apache-airflow-providers-apache-hive"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+#    depends_on:
+#      airflow-db:
+#        condition: service_healthy
+#      airflow-redis:
+#        condition: service_healthy
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Airflow \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com || true
+    profiles: ["init"]
+
+  airflow-webserver:
+    image: apache/airflow:2.9.2-python3.11
+    hostname: airflow-webserver
+    restart: always
+    user: "${AIRFLOW_UID:-50000}"
+    ports:
+      - "8090:8080"
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-apache-spark apache-airflow-providers-apache-hdfs apache-airflow-providers-apache-hive"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+#    depends_on:
+#      airflow-db:
+#        condition: service_healthy
+#      airflow-redis:
+#        condition: service_healthy
+    command: ["airflow", "webserver"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.2-python3.11
+    hostname: airflow-scheduler
+    restart: always
+    user: "${AIRFLOW_UID:-50000}"
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-apache-spark apache-airflow-providers-apache-hdfs apache-airflow-providers-apache-hive"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+#    depends_on:
+#      airflow-db:
+#        condition: service_healthy
+#      airflow-redis:
+#        condition: service_healthy
+    command: ["airflow", "scheduler"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'airflow scheduler' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-worker:
+    image: apache/airflow:2.9.2-python3.11
+    hostname: airflow-worker
+    restart: always
+    user: "${AIRFLOW_UID:-50000}"
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-apache-spark apache-airflow-providers-apache-hdfs apache-airflow-providers-apache-hive"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+#    depends_on:
+#      airflow-db:
+#        condition: service_healthy
+#      airflow-redis:
+#        condition: service_healthy
+    command: ["airflow", "celery", "worker"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'airflow celery worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
 networks:
   hadoop-network:
     driver: bridge
-# volumes:
-# namenode-data:
-# datanode-data:
-# hive-metastore-db-data:
+
+volumes:
+  # namenode-data:
+  # datanode-data:
+  # hive-metastore-db-data:
+  airflow-db-data:
