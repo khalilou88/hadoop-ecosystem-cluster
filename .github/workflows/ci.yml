@@ -54,7 +54,7 @@ jobs:
           echo "Airflow database initialized and admin user created."
         env:
           # Use a consistent UID for Airflow containers to avoid permission issues with mounted volumes
-          AIRFLOW_UID: ${{ env.AIRFLOW_FERNET_KEY }}
+          AIRFLOW_UID: ${{ env.AIRFLOW_UID }}
           # This should be set by the previous step via GITHUB_ENV
           AIRFLOW_FERNET_KEY: ${{ env.AIRFLOW_FERNET_KEY }}
 
