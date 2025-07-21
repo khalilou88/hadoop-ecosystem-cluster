@@ -414,7 +414,7 @@ services:
     restart: always
     user: "${AIRFLOW_UID:-50000}"
     ports:
-      - "8080:8080" # Airflow UI
+      - "8081:8080" # Airflow UI
     environment:
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")}
@@ -434,7 +434,7 @@ services:
         condition: service_healthy
     command: ["airflow", "webserver"]
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health | grep 'healthy'"]
+      test: ["CMD-SHELL", "curl --fail http://localhost:8081/health | grep 'healthy'"]
       interval: 10s
       timeout: 5s
       retries: 5
