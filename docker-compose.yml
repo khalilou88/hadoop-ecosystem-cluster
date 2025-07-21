@@ -351,10 +351,164 @@ services:
       timeout: 10s
       retries: 5
 
+  # ------------------------------------------------------------------------------------------------------------------
+  # Airflow Services
+  # ------------------------------------------------------------------------------------------------------------------
+  airflow-db:
+    image: postgres:13
+    hostname: airflow-db
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    networks:
+      - hadoop-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-redis:
+    image: redis:7
+    hostname: airflow-redis
+    networks:
+      - hadoop-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    hostname: airflow-init
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW_UID: 50000 # To prevent permission issues on mounted volumes
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    entrypoint: /bin/bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Airflow --lastname User --role Admin --email admin@example.com"
+    profiles: ["init"] # Use profiles to run this only when needed
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    hostname: airflow-webserver
+    restart: always
+    ports:
+      - "8080:8080" # Airflow UI
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW_UID: 50000
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    command: ["airflow", "webserver"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail http://localhost:8080/health | grep 'healthy'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    hostname: airflow-scheduler
+    restart: always
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW_UID: 50000
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    command: ["airflow", "scheduler"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'airflow scheduler'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    hostname: airflow-worker
+    restart: always
+    environment:
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python -c "from cryptography.fernet.Fernet; print(Fernet.generate_key().decode())")}
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW_UID: 50000
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    networks:
+      - hadoop-network
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    command: ["airflow", "celery", "worker"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'airflow celery worker'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   hadoop-network:
     driver: bridge
-# volumes:
+
+volumes:
 # namenode-data:
 # datanode-data:
 # hive-metastore-db-data:
+  airflow-db-data:
